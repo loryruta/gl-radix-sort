@@ -111,9 +111,13 @@ r::radix_sorter::radix_sorter(size_t init_internal_buf_size)
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_part_addr_buf);
 	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * size_t(exp2(RADIX_SORT_BITSET_NUM)) * sizeof(GLuint)), nullptr, NULL);
 
-	glGenBuffers(1, &m_write_off_buf); // Write offset
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_write_off_buf);
-	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (2 * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
+	glGenBuffers(1, &m_key_cpy_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_key_cpy_buf);
+	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+	glGenBuffers(1, &m_val_cpy_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_val_cpy_buf);
+	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
 }
 
 r::radix_sorter::~radix_sorter()
@@ -135,9 +139,6 @@ void r::radix_sorter::sort(GLuint key_data_buf, GLuint val_data_buf, size_t arr_
 
 	auto part_num = GLuint(ceil(float(arr_size) / float(RADIX_SORT_WORKGROUP_SIZE)));
 	auto bitset_num = GLuint(ceil(float(sizeof(GLuint) * 8) / float(RADIX_SORT_BITSET_NUM)));
-
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_write_off_buf);
-	GLuint zero = 0; glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(GLuint), &zero);
 
 	for (int i = 0; i < bitset_num; i++)
 	{
@@ -178,15 +179,22 @@ void r::radix_sorter::sort(GLuint key_data_buf, GLuint val_data_buf, size_t arr_
 		// Write
 		glUseProgram(m_write_program);
 
-		// Copy key_buf on key_cpy_buf
 		glBindBuffer(GL_COPY_READ_BUFFER, key_data_buf);
-		glBindBuffer(GL_COPY_WRITE_BUFFER, m_part_addr_buf); // part_addr_buf = key_cpy_buf
+		glBindBuffer(GL_COPY_WRITE_BUFFER, m_key_cpy_buf);
 		glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, GLsizeiptr(arr_size * sizeof(GLuint)));
+
+		if (val_data_buf != NULL)
+		{
+			glBindBuffer(GL_COPY_READ_BUFFER, val_data_buf);
+			glBindBuffer(GL_COPY_WRITE_BUFFER, m_val_cpy_buf);
+			glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, GLsizeiptr(arr_size * sizeof(GLuint)));
+		}
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_data_buf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, val_data_buf);
-		glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 2, m_part_addr_buf, 0, GLsizeiptr(arr_size * sizeof(GLuint))); // key_cpy_buf
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_addr_buf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_key_cpy_buf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_val_cpy_buf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_addr_buf);
 
 		glUniform1ui(get_uniform_location(m_write_program, "u_arr_size"), arr_size);
 		glUniform1ui(get_uniform_location(m_write_program, "u_bitset_idx"), i);

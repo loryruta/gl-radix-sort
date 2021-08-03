@@ -26,8 +26,8 @@ void run_app()
 	// Config
 	// ------------------------------------------------------------------------------------------------
 
-	size_t item_num = 3000;
-	size_t iter_num = 100;
+	size_t item_num = 3500;
+	size_t iter_num = 1;
 	using time_unit = std::chrono::microseconds;
 	char const* time_unit_sign = "micros";
 
@@ -39,22 +39,21 @@ void run_app()
 	glGenBuffers(1, &key_buf);
 	{
 		std::vector<GLuint> data(item_num);
-		//std::generate(data.begin(), data.end(), std::rand);
+		std::generate(data.begin(), data.end(), std::rand);
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, key_buf);
-		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(item_num * sizeof(GLuint)), data.data(), NULL);
+		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(data.size() * sizeof(GLuint)), data.data(), NULL);
 	}
 
 	GLuint val_buf = NULL;
-	/*
 	glGenBuffers(1, &val_buf);
 	{
-		std::vector<GLuint> data(num);
+		std::vector<GLuint> data(item_num);
 		std::iota(data.begin(), data.end(), 0);
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, val_buf);
-		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(num * sizeof(GLuint)), data.data(), NULL);
-	}*/
+		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(data.size() * sizeof(GLuint)), data.data(), NULL);
+	}
 
 	auto radix_sorter = std::make_unique<r::radix_sorter>(item_num);
 

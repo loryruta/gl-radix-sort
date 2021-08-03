@@ -12,8 +12,9 @@ layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, binding = 0) buffer ssbo_key       { uint b_key_buf[];  };
 layout(std430, binding = 1) buffer ssbo_val       { uint b_val_buf[];  };
-layout(std430, binding = 2) buffer ssbo_key_cpy   { uint b_key_cpy_buf[]; }; // Copy from key_buf
-layout(std430, binding = 3) buffer ssbo_addr      { uint b_addr_buf[]; };
+layout(std430, binding = 2) buffer ssbo_key_cpy   { uint b_key_cpy_buf[]; }; // Copy of key_buf
+layout(std430, binding = 3) buffer ssbo_val_cpy   { uint b_val_cpy_buf[]; }; // Copy of val_buf
+layout(std430, binding = 4) buffer ssbo_addr      { uint b_addr_buf[]; };
 
 uniform uint u_arr_size;
 uniform uint u_bitset_idx;
@@ -48,6 +49,7 @@ void main()
         {
             uint addr = write_off + b_addr_buf[calc_addr_idx(PARTITION_IDX, THREAD_IDX, i)] - 1;
             b_key_buf[addr] = b_key_cpy_buf[abs_idx];
+            b_val_buf[addr] = b_val_cpy_buf[abs_idx];
         }
 
         write_off += b_addr_buf[(u_arr_size - 1) * BITSET_SIZE + i];

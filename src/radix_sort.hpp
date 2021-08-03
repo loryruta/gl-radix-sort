@@ -13,7 +13,8 @@ namespace r
 		size_t m_internal_max_buf_size;
 		GLuint m_part_addr_buf;
 		GLuint m_addr_buf;
-		GLuint m_write_off_buf;
+		GLuint m_key_cpy_buf;
+		GLuint m_val_cpy_buf;
 
 		radix_sorter(size_t init_internal_buf_size = 0);
 		~radix_sorter();
