@@ -1,0 +1,41 @@
+#version 460
+
+#define WORKGROUP_SIZE 256
+#define THREAD_IDX     gl_LocalInvocationIndex
+#define PARTITION_IDX  gl_WorkGroupID.x + gl_NumWorkGroups.x * (gl_WorkGroupID.y + gl_NumWorkGroups.z * gl_WorkGroupID.z)
+#define PARTITION_NUM  gl_NumWorkGroups.x + gl_NumWorkGroups.y + gl_NumWorkGroups.z
+#define PARTITION_SIZE WORKGROUP_SIZE
+#define BITSET_NUM     4
+#define BITSET_SIZE    uint(exp2(BITSET_NUM))
+
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 2) buffer ssbo_part_addr { uint b_part_addr_buf[]; };
+layout(std430, binding = 3) buffer ssbo_addr      { uint b_addr_buf[]; };
+
+uniform uint u_to_sum_part_idx;
+
+uint calc_abs_idx(uint part_idx, uint local_idx)
+{
+    return part_idx * PARTITION_SIZE + local_idx;
+}
+
+uint calc_addr_idx(uint part_idx, uint local_idx, uint bit_idx)
+{
+    return calc_abs_idx(part_idx, local_idx) * BITSET_SIZE + bit_idx;
+}
+
+//
+
+void main()
+{
+    if (PARTITION_IDX <= u_to_sum_part_idx) {
+        return;
+    }
+
+    for (uint i = 0; i < BITSET_SIZE; i++)
+    {
+        uint sum_val = b_part_addr_buf[calc_addr_idx(u_to_sum_part_idx, PARTITION_SIZE - 1, i)];
+        b_addr_buf[calc_addr_idx(PARTITION_IDX, THREAD_IDX, i)] += sum_val;
+    }
+}

@@ -1,0 +1,55 @@
+#version 460
+
+#define WORKGROUP_SIZE 256
+#define THREAD_IDX     gl_LocalInvocationIndex
+#define PARTITION_IDX  gl_WorkGroupID.x + gl_NumWorkGroups.x * (gl_WorkGroupID.y + gl_NumWorkGroups.z * gl_WorkGroupID.z)
+#define PARTITION_NUM  gl_NumWorkGroups.x + gl_NumWorkGroups.y + gl_NumWorkGroups.z
+#define PARTITION_SIZE WORKGROUP_SIZE
+#define BITSET_NUM     4
+#define BITSET_SIZE    uint(exp2(BITSET_NUM))
+
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer ssbo_key       { uint b_key_buf[];  };
+layout(std430, binding = 1) buffer ssbo_val       { uint b_val_buf[];  };
+layout(std430, binding = 2) buffer ssbo_key_cpy   { uint b_key_cpy_buf[]; }; // Copy from key_buf
+layout(std430, binding = 3) buffer ssbo_addr      { uint b_addr_buf[]; };
+
+uniform uint u_arr_size;
+uniform uint u_bitset_idx;
+
+uint calc_abs_idx(uint part_idx, uint local_idx)
+{
+    return part_idx * PARTITION_SIZE + local_idx;
+}
+
+uint calc_addr_idx(uint part_idx, uint local_idx, uint bit_idx)
+{
+    return calc_abs_idx(part_idx, local_idx) * BITSET_SIZE + bit_idx;
+}
+
+//
+
+void main()
+{
+    uint abs_idx = calc_abs_idx(PARTITION_IDX, THREAD_IDX);
+    if (abs_idx >= u_arr_size) {
+        return;
+    }
+
+    uint write_off = 0;
+
+    for (uint i = 0; i < BITSET_SIZE; i++)
+    {
+        uint bitset_mask = (BITSET_SIZE - 1) << (BITSET_NUM * u_bitset_idx);
+        uint bitset_val = i << (BITSET_NUM * u_bitset_idx);
+        bool pred = (b_key_cpy_buf[abs_idx] & bitset_mask) == bitset_val;
+        if (pred)
+        {
+            uint addr = write_off + b_addr_buf[calc_addr_idx(PARTITION_IDX, THREAD_IDX, i)] - 1;
+            b_key_buf[addr] = b_key_cpy_buf[abs_idx];
+        }
+
+        write_off += b_addr_buf[(u_arr_size - 1) * BITSET_SIZE + i];
+    }
+}
