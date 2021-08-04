@@ -1,0 +1,96 @@
+#version 460
+
+#define THREAD_IDX        gl_LocalInvocationIndex
+#define THREADS_NUM       64
+#define THREAD_BLOCK_IDX  (gl_WorkGroupID.x + gl_NumWorkGroups.x * (gl_WorkGroupID.y + gl_NumWorkGroups.z * gl_WorkGroupID.z))
+#define ITEMS_NUM         4
+#define BITSET_NUM        4
+#define BITSET_SIZE       uint(exp2(BITSET_NUM))
+
+#define OP_UPSWEEP    0
+#define OP_CLEAR_LAST 1
+#define OP_DOWNSWEEP  2
+
+layout(local_size_x = THREADS_NUM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer ssbo_local_offsets_buf { uint b_local_offsets_buf[]; }; // b_count_buf[THREAD_BLOCKS_NUM * BITSET_SIZE]
+
+uniform uint u_thread_blocks_num;
+uniform uint u_depth;
+uniform uint u_op;
+
+void main()
+{
+    // ------------------------------------------------------------------------------------------------
+    // Blelloch scan
+    // ------------------------------------------------------------------------------------------------
+
+    uint step = uint(exp2(u_depth));
+
+    if (u_op == OP_UPSWEEP)
+    {
+        // Reduce (upsweep)
+        for (uint i = 0; i < ITEMS_NUM; i++)
+        {
+            uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
+
+            if (idx % (step * 2) == 0)
+            {
+                uint from_idx = idx + (step - 1);
+                uint to_idx = from_idx + step;
+
+                if (to_idx < u_thread_blocks_num)
+                {
+                    for (uint rad = 0; rad < BITSET_SIZE; rad++)
+                    {
+                        uint from_rad_idx = rad * u_thread_blocks_num + from_idx;
+                        uint to_rad_idx = rad * u_thread_blocks_num + to_idx;
+
+                        b_local_offsets_buf[to_rad_idx] = b_local_offsets_buf[from_rad_idx] + b_local_offsets_buf[to_rad_idx];
+                    }
+                }
+            }
+        }
+    }
+    else if (u_op == OP_DOWNSWEEP)
+    {
+        // Downsweep
+        for (uint i = 0; i < ITEMS_NUM; i++)
+        {
+            uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
+
+            if (idx % (step * 2) == 0)
+            {
+                uint from_idx = idx + (step - 1);
+                uint to_idx = from_idx + step;
+
+                if (to_idx < u_thread_blocks_num)
+                {
+                    for (uint rad = 0; rad < BITSET_SIZE; rad++)
+                    {
+                        uint from_rad_idx = rad * u_thread_blocks_num + from_idx;
+                        uint to_rad_idx = rad * u_thread_blocks_num + to_idx;
+
+                        uint r = b_local_offsets_buf[to_rad_idx];
+                        b_local_offsets_buf[to_rad_idx] = b_local_offsets_buf[from_rad_idx] + b_local_offsets_buf[to_rad_idx];
+                        b_local_offsets_buf[from_rad_idx] = r;
+                    }
+                }
+            }
+        }
+    }
+    else// if (u_op == OP_CLEAR_LAST)
+    {
+        for (uint i = 0; i < ITEMS_NUM; i++)
+        {
+            uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
+            if (idx == (u_thread_blocks_num - 1))
+            {
+                for (uint rad = 0; rad < BITSET_SIZE; rad++)
+                {
+                    b_local_offsets_buf[rad * u_thread_blocks_num + idx] = 0;
+                }
+            }
+        }
+    }
+}

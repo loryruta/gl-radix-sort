@@ -1,0 +1,99 @@
+#version 460
+
+#define THREAD_IDX        gl_LocalInvocationIndex
+#define THREADS_NUM       64
+#define THREAD_BLOCK_IDX  (gl_WorkGroupID.x + gl_NumWorkGroups.x * (gl_WorkGroupID.y + gl_NumWorkGroups.z * gl_WorkGroupID.z))
+#define THREAD_BLOCKS_NUM (gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_NumWorkGroups.z)
+#define ITEMS_NUM         4
+#define BITSET_NUM        4
+#define BITSET_SIZE       uint(exp2(BITSET_NUM))
+
+layout(local_size_x = THREADS_NUM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer ssbo_key            { uint b_key_buf[]; };
+layout(std430, binding = 1) buffer ssbo_local_off_buf  { uint b_local_off_buf[THREAD_BLOCKS_NUM * BITSET_SIZE];  };
+layout(std430, binding = 2) buffer ssbo_glob_count_buf { uint b_glob_count_buf[BITSET_SIZE]; };
+
+uniform uint u_arr_len;
+uniform uint u_bitset_idx;
+
+shared uint s_count_buf[BITSET_SIZE];
+shared uint s_key_buf[THREADS_NUM * ITEMS_NUM];
+
+void main()
+{
+    uint sum;
+
+    // ------------------------------------------------------------------------------------------------
+    // Global offsets
+    // ------------------------------------------------------------------------------------------------
+
+    uint glob_off[BITSET_SIZE];
+
+    // Exclusive scan
+    uint sum = 0;
+    for (uint i = 0; i < BITSET_SIZE; i++)
+    {
+        glob_off[i] = sum;
+        sum += b_glob_count_buf[i];
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // Radix sort on partition
+    // ------------------------------------------------------------------------------------------------
+
+    // Count
+    for (uint i = 0; i < ITEMS_NUM; i++)
+    {
+        uint idx = i + ITEMS_NUM * (THREAD_IDX + THREAD_BLOCKS_NUM * THREAD_BLOCK_IDX);
+        if (idx < u_arr_len)
+        {
+            uint rad = (b_key_buf[idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
+            atomicAdd(s_count_buf[rad], 1);
+        }
+    }
+
+    barrier();
+
+    // Inclusive scan
+    uint offsets_buf[BITSET_SIZE];
+    uint sum = 0;
+    for (uint rad = 0; rad < BITSET_SIZE; rad++)
+    {
+        sum += s_count_buf[rad];
+        offsets_buf[rad] = sum;
+    }
+
+    // Shuffling
+    for (uint i = 0; i < ITEMS_NUM; i++)
+    {
+        uint idx = i + ITEMS_NUM * (THREAD_IDX + THREAD_BLOCKS_NUM * THREAD_BLOCK_IDX);
+        if (idx < u_arr_len)
+        {
+            uint rad = (b_key_buf[idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
+            uint to_idx = offsets_buf[rad] - atomicAdd(s_count_buf[rad], -1);
+            s_key_buf[to_idx] = b_key_buf[idx];
+        }
+    }
+
+    barrier();
+
+    // s_count_buf[rad] = 0; Should already be zeroed
+    // barrier();
+
+    // ------------------------------------------------------------------------------------------------
+    // Scattered writes to sorted partitions
+    // ------------------------------------------------------------------------------------------------
+
+    for (uint i = 0; i < ITEMS_NUM; i++)
+    {
+        uint k = s_key_buf[THREAD_IDX * ITEMS_NUM + i];
+        uint rad = (k & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
+
+        uint local_off = b_local_off_buf[THREAD_BLOCK_IDX * BITSET_SIZE + rad];
+        uint glob_off  = b_global_off_buf[rad];
+        uint idx_off   = atomicAdd(s_count_buf[rad], 1);
+
+        b_key_buf[glob_off + local_off + idx_off] = k;
+    }
+}

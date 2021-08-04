@@ -5,6 +5,7 @@
 #include <chrono>
 
 #include "radix_sort.hpp"
+#include "renderdoc.hpp"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -26,10 +27,10 @@ void run_app()
 	// Config
 	// ------------------------------------------------------------------------------------------------
 
-	size_t item_num = 3500;
+	size_t item_num = 512;
 	size_t iter_num = 1;
-	using time_unit = std::chrono::microseconds;
-	char const* time_unit_sign = "micros";
+	using time_unit = std::chrono::milliseconds;
+	char const* time_unit_sign = "ms";
 
 	// ------------------------------------------------------------------------------------------------
 	// Allocation
@@ -55,7 +56,7 @@ void run_app()
 		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(data.size() * sizeof(GLuint)), data.data(), NULL);
 	}
 
-	auto radix_sorter = std::make_unique<r::radix_sorter>(item_num);
+	auto radix_sorter = std::make_unique<rgc::radix_sorter>(item_num);
 
 	// ------------------------------------------------------------------------------------------------
 	// Sorting
@@ -72,12 +73,14 @@ void run_app()
 
 	for (int i = 0; i < iter_num; i++)
 	{
+		glFinish();
+
 		auto now = std::chrono::system_clock::now().time_since_epoch();
 
 		radix_sorter->sort(key_buf, val_buf, item_num);
 
 		auto elapsed = std::chrono::duration_cast<time_unit>(std::chrono::system_clock::now().time_since_epoch() - now);
-		//printf("%d) Elapsed: %lld %s\n", i, elapsed.count(), time_unit_sign); fflush(stdout);
+		printf("%d) Elapsed: %lld %s\n", i, elapsed.count(), time_unit_sign); fflush(stdout);
 
 		avg_elapsed += elapsed;
 	}
@@ -148,6 +151,8 @@ int main()
 	glGetIntegerv(GL_MAX_COMPUTE_SHARED_MEMORY_SIZE, &v1);     printf("GL_MAX_COMPUTE_SHARED_MEMORY_SIZE: %d\n", v1);
 	glGetIntegerv(GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS, &v1);  printf("GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS: %d\n", v1);
 	glGetIntegerv(GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS, &v1); printf("GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS: %d\n", v1);
+
+	glGetIntegerv(GL_WARP_SIZE_NV, &v1); printf("GL_WARP_SIZE_NV: %d\n", v1);
 
 	fflush(stdout);
 

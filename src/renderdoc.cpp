@@ -27,7 +27,15 @@ void renderdoc_init()
 	}
 }
 
-void renderdoc::watch(bool capture, const std::function<void()>& f)
+bool rgc::renderdoc::is_profiling()
+{
+	if (g_handle == nullptr) {
+		renderdoc_init();
+	}
+	return g_handle != nullptr;
+}
+
+void rgc::renderdoc::watch(bool capture, const std::function<void()>& f)
 {
 	if (g_handle == nullptr) {
 		renderdoc_init();

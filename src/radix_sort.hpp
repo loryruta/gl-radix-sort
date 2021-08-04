@@ -1,25 +1,30 @@
 #pragma once
 
+#include "gl.hpp"
+
 #include <glad/glad.h>
 
-namespace r
+
+
+namespace rgc
 {
 	struct radix_sorter
 	{
-		GLuint m_scan_program;
-		GLuint m_sum_program;
-		GLuint m_write_program;
+		rgc::program m_count_program;
+		rgc::program m_local_offsets_program;
+		rgc::program m_reorder_program;
 
-		size_t m_internal_max_buf_size;
-		GLuint m_part_addr_buf;
-		GLuint m_addr_buf;
-		GLuint m_key_cpy_buf;
-		GLuint m_val_cpy_buf;
+		size_t m_internal_arr_len;
 
-		radix_sorter(size_t init_internal_buf_size = 0);
+		GLuint m_local_offsets_buf;
+		GLuint m_global_offsets_buf;
+
+		radix_sorter(size_t init_arr_len = 0);
 		~radix_sorter();
 
-		void sort(GLuint data_buf, GLuint idx_buf, size_t arr_size);
+		void resize_internal_buf(size_t arr_len);
+
+		void sort(GLuint data_buf, GLuint idx_buf, size_t arr_len);
 	};
 }
 

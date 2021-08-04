@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(SRC
         src/main.cpp
 
+        src/gl.hpp
+        src/gl.cpp
         src/radix_sort.hpp
         src/radix_sort.cpp
         src/renderdoc.hpp
@@ -17,9 +19,10 @@ set(SRC
         )
 
 set(SHADERS
-        resources/radix_sort__scan.comp
-        resources/radix_sort__sum.comp
-        resources/radix_sort__write.comp
+        resources/radix_sort__count.comp
+        resources/radix_sort__local_offsets.comp
+        resources/radix_sort__global_offsets.comp
+        resources/radix_sort__reorder.comp
         )
 
 add_executable(parallel_radix_sort ${SRC})

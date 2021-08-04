@@ -6,205 +6,147 @@
 
 #include "renderdoc.hpp"
 
-#define RADIX_SORT_WORKGROUP_SIZE 256
-#define RADIX_SORT_BITSET_NUM     4
+#define RGC_RADIX_SORT__BITSET_NUM        4
+#define RGC_RADIX_SORT__BITSET_SIZE       GLuint(exp2(RGC_RADIX_SORT__BITSET_NUM))
+#define RGC_RADIX_SORT__THREADS_PER_BLOCK 64
+#define RGC_RADIX_SORT__ITEMS_PER_THREAD  4
 
-GLuint compile_shader_from_file_and_validate(GLenum shader_type, std::filesystem::path const& filename)
+rgc::radix_sorter::radix_sorter(size_t init_arr_len)
 {
-	GLuint shader = glCreateShader(shader_type);
-
-	std::ifstream f(filename);
-	if (!f.is_open()) {
-		throw std::invalid_argument("The given filename doesn't exist.");
-	}
-	std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-	char const* src_ptr = src.c_str();
-	glShaderSource(shader, 1, &src_ptr, nullptr);
-	glCompileShader(shader);
-
-	GLint status;
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
-	if (status == GL_FALSE)
 	{
-		GLint max_len = 0;
-		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_len);
+		rgc::shader shader(GL_COMPUTE_SHADER);
+		shader.src_from_file("resources/radix_sort__count.comp");
+		shader.compile();
 
-		std::vector<GLchar> log(max_len);
-		glGetShaderInfoLog(shader, max_len, nullptr, log.data());
-
-		std::cerr << filename << " failed to compile: " << std::endl << std::string(log.begin(), log.end()) << std::endl;
-
-		throw std::runtime_error("Couldn't compile shader. See console logs for more information.");
+		m_count_program.attach_shader(shader.m_name);
+		m_count_program.link();
 	}
 
-	return shader;
-}
-
-std::string get_program_info_log(GLuint program)
-{
-	GLint log_len = 0;
-	glGetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
-
-	std::vector<GLchar> log(log_len);
-	glGetProgramInfoLog(program, log_len, nullptr, log.data());
-	return std::string(log.begin(), log.end());
-}
-
-void link_program_and_validate(GLuint program)
-{
-	GLint status;
-	glLinkProgram(program);
-	glGetProgramiv(program, GL_LINK_STATUS, &status);
-	if (status == GL_FALSE) {
-		std::cerr << get_program_info_log(program) << std::endl;
-		throw std::runtime_error("Couldn't link shader program.");
-	}
-}
-
-GLint get_uniform_location(GLuint program, char const* name)
-{
-	GLint loc = glGetUniformLocation(program, name);
-	if (loc < 0)
 	{
-		printf("Couldn't find uniform: `%s`\n", name);
-		fflush(stdout);
+		rgc::shader shader(GL_COMPUTE_SHADER);
+		shader.src_from_file("resources/radix_sort__local_offsets.comp");
+		shader.compile();
 
-		throw std::runtime_error("Couldn't find uniform. Is it unused maybe?");
-	}
-	return loc;
-}
-
-r::radix_sorter::radix_sorter(size_t init_internal_buf_size)
-{
-	GLuint shader;
-
-	// Scan
-	m_scan_program = glCreateProgram();
-	shader = compile_shader_from_file_and_validate(GL_COMPUTE_SHADER, "resources/radix_sort__scan.comp");
-	glAttachShader(m_scan_program, shader);
-
-	link_program_and_validate(m_scan_program);
-
-	// Sum
-	m_sum_program = glCreateProgram();
-	shader = compile_shader_from_file_and_validate(GL_COMPUTE_SHADER, "resources/radix_sort__sum.comp");
-	glAttachShader(m_sum_program, shader);
-
-	link_program_and_validate(m_sum_program);
-
-	// Write
-	m_write_program = glCreateProgram();
-	shader = compile_shader_from_file_and_validate(GL_COMPUTE_SHADER, "resources/radix_sort__write.comp");
-	glAttachShader(m_write_program, shader);
-
-	link_program_and_validate(m_write_program);
-
-	// todo clear shaders
-
-	m_internal_max_buf_size = init_internal_buf_size;
-
-	glGenBuffers(1, &m_addr_buf); // Addresses buffer
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_addr_buf);
-	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * size_t(exp2(RADIX_SORT_BITSET_NUM)) * sizeof(GLuint)), nullptr, NULL);
-
-	glGenBuffers(1, &m_part_addr_buf); // Partition addresses buffer
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_part_addr_buf);
-	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * size_t(exp2(RADIX_SORT_BITSET_NUM)) * sizeof(GLuint)), nullptr, NULL);
-
-	glGenBuffers(1, &m_key_cpy_buf);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_key_cpy_buf);
-	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
-
-	glGenBuffers(1, &m_val_cpy_buf);
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_val_cpy_buf);
-	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (m_internal_max_buf_size * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
-}
-
-r::radix_sorter::~radix_sorter()
-{
-	glDeleteProgram(m_scan_program);
-	glDeleteProgram(m_sum_program);
-	glDeleteProgram(m_write_program);
-
-	glDeleteBuffers(1, &m_part_addr_buf);
-	glDeleteBuffers(1, &m_addr_buf);
-}
-
-
-void r::radix_sorter::sort(GLuint key_data_buf, GLuint val_data_buf, size_t arr_size)
-{
-	if (m_internal_max_buf_size < arr_size) {
-		throw std::runtime_error("Internal buffer sizes are too small. Consider using much more memory.");
+		m_local_offsets_program.attach_shader(shader.m_name);
+		m_local_offsets_program.link();
 	}
 
-	auto part_num = GLuint(ceil(float(arr_size) / float(RADIX_SORT_WORKGROUP_SIZE)));
-	auto bitset_num = GLuint(ceil(float(sizeof(GLuint) * 8) / float(RADIX_SORT_BITSET_NUM)));
+	resize_internal_buf(init_arr_len);
+}
 
-	for (int i = 0; i < bitset_num; i++)
+rgc::radix_sorter::~radix_sorter()
+{
+}
+
+GLuint calc_thread_blocks_num(size_t arr_len)
+{
+	return GLuint(ceil(float(arr_len) / float(RGC_RADIX_SORT__THREADS_PER_BLOCK * RGC_RADIX_SORT__ITEMS_PER_THREAD)));
+}
+
+void rgc::radix_sorter::resize_internal_buf(size_t arr_len)
+{
+	m_internal_arr_len = arr_len;
+
+	glGenBuffers(1, &m_local_offsets_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_local_offsets_buf);
+	glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizeiptr(calc_thread_blocks_num(arr_len) * RGC_RADIX_SORT__BITSET_SIZE * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
+
+	glGenBuffers(1, &m_global_offsets_buf);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_global_offsets_buf);
+	glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizeiptr(RGC_RADIX_SORT__BITSET_SIZE * sizeof(GLuint)), nullptr, NULL);
+}
+
+void rgc::radix_sorter::sort(GLuint key_buf, GLuint val_buf, size_t arr_len)
+{
+	if (arr_len <= 1) {
+		return;
+	}
+
+	if (m_internal_arr_len < arr_len) {
+		resize_internal_buf(arr_len);
+	}
+
+	GLuint zero = 0;
+
+	GLuint num_thread_blocks = calc_thread_blocks_num(arr_len);
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_global_offsets_buf);
+	glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED, GL_UNSIGNED_INT, &zero);
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_local_offsets_buf);
+	glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED, GL_UNSIGNED_INT, &zero);
+
+	// ------------------------------------------------------------------------------------------------
+	// Per-block & global radix count
+	// ------------------------------------------------------------------------------------------------
+
+	m_count_program.use();
+
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_buf);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_local_offsets_buf);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_global_offsets_buf);
+
+	glUniform1ui(m_count_program.get_uniform_location("u_bitset_idx"), 0);
+	glUniform1ui(m_count_program.get_uniform_location("u_arr_len"), arr_len);
+
+	rgc::renderdoc::watch(true, [&]()
 	{
-		// Scan
-		glUseProgram(m_scan_program);
+		glDispatchCompute(num_thread_blocks, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+	});
 
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_data_buf);
-		//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, val_data_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_part_addr_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_addr_buf);
+	// ------------------------------------------------------------------------------------------------
+	// Local offsets (block-wide exclusive scan per radix)
+	// ------------------------------------------------------------------------------------------------
 
-		glUniform1ui(get_uniform_location(m_scan_program, "u_arr_size"), arr_size);
-		glUniform1ui(get_uniform_location(m_scan_program, "u_bitset_idx"), i);
+	m_local_offsets_program.use();
 
-		renderdoc::watch(i == 0, [&]()
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_local_offsets_buf);
+
+	// Up-sweep (reduction)
+	for (GLuint d = 0; d < GLuint(log2(num_thread_blocks)); d++)
+	{
+		glUniform1ui(m_local_offsets_program.get_uniform_location("u_thread_blocks_num"), num_thread_blocks);
+		glUniform1ui(m_local_offsets_program.get_uniform_location("u_op"), 0);
+		glUniform1ui(m_local_offsets_program.get_uniform_location("u_depth"), d);
+
+		rgc::renderdoc::watch(d == 0, [&]()
 		{
-			glDispatchCompute(part_num, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		});
-
-		// Sum
-		glUseProgram(m_sum_program);
-
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_part_addr_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_addr_buf);
-
-		for (int part_idx = 0; part_idx < (part_num - 1); part_idx++)
-		{
-			glUniform1ui(get_uniform_location(m_sum_program, "u_to_sum_part_idx"), part_idx);
-
-			renderdoc::watch(i == 0 && part_idx == (part_num - 2), [&]()
-			{
-				glDispatchCompute(part_num, 1, 1);
-				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			});
-		}
-
-		// Write
-		glUseProgram(m_write_program);
-
-		glBindBuffer(GL_COPY_READ_BUFFER, key_data_buf);
-		glBindBuffer(GL_COPY_WRITE_BUFFER, m_key_cpy_buf);
-		glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, GLsizeiptr(arr_size * sizeof(GLuint)));
-
-		if (val_data_buf != NULL)
-		{
-			glBindBuffer(GL_COPY_READ_BUFFER, val_data_buf);
-			glBindBuffer(GL_COPY_WRITE_BUFFER, m_val_cpy_buf);
-			glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, GLsizeiptr(arr_size * sizeof(GLuint)));
-		}
-
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_data_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, val_data_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_key_cpy_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_val_cpy_buf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_addr_buf);
-
-		glUniform1ui(get_uniform_location(m_write_program, "u_arr_size"), arr_size);
-		glUniform1ui(get_uniform_location(m_write_program, "u_bitset_idx"), i);
-
-		renderdoc::watch(i == (bitset_num - 1), [&]()
-		{
-			glDispatchCompute(part_num, 1, 1);
+			auto workgroups_num = GLuint(ceil(float(num_thread_blocks) / float(RGC_RADIX_SORT__THREADS_PER_BLOCK * RGC_RADIX_SORT__ITEMS_PER_THREAD)));
+			glDispatchCompute(workgroups_num, 1, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 		});
 	}
 
-	glFinish(); // todo use fences
+	// Clear last
+	glUniform1ui(m_local_offsets_program.get_uniform_location("u_thread_blocks_num"), num_thread_blocks);
+	glUniform1ui(m_local_offsets_program.get_uniform_location("u_op"), 1);
+
+	rgc::renderdoc::watch(true, [&]()
+	{
+		auto workgroups_num = GLuint(ceil(float(num_thread_blocks) / float(RGC_RADIX_SORT__THREADS_PER_BLOCK * RGC_RADIX_SORT__ITEMS_PER_THREAD)));
+		glDispatchCompute(workgroups_num, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+	});
+
+	// Down-sweep
+	for (GLint d = GLint(log2(num_thread_blocks)) - 1; d >= 0; d--)
+	{
+		glUniform1ui(m_local_offsets_program.get_uniform_location("u_thread_blocks_num"), num_thread_blocks);
+		glUniform1ui(m_local_offsets_program.get_uniform_location("u_op"), 2);
+		glUniform1ui(m_local_offsets_program.get_uniform_location("u_depth"), d);
+
+		rgc::renderdoc::watch(true, [&]()
+		{
+			auto workgroups_num = GLuint(ceil(float(num_thread_blocks) / float(RGC_RADIX_SORT__THREADS_PER_BLOCK * RGC_RADIX_SORT__ITEMS_PER_THREAD)));
+			glDispatchCompute(workgroups_num, 1, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		});
+	}
+
+	// ------------------------------------------------------------------------------------------------
+
+	rgc::program::unuse();
+
+	glFinish();
 }

@@ -1,0 +1,36 @@
+#version 460
+
+#define THREAD_IDX        gl_LocalInvocationIndex
+#define THREADS_NUM       64
+#define THREAD_BLOCK_IDX  (gl_WorkGroupID.x + gl_NumWorkGroups.x * (gl_WorkGroupID.y + gl_NumWorkGroups.z * gl_WorkGroupID.z))
+#define THREAD_BLOCKS_NUM (gl_NumWorkGroups.x * gl_NumWorkGroups.y * gl_NumWorkGroups.z)
+#define ITEMS_NUM         4
+
+#define BITSET_NUM        4
+#define BITSET_SIZE       uint(exp2(BITSET_NUM))
+
+layout(local_size_x = THREADS_NUM, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer ssbo_key           { uint b_key_buf[];  };
+layout(std430, binding = 1) buffer ssbo_count_buf     { uint b_count_buf[]; }; // [THREAD_BLOCKS_NUM * BITSET_SIZE]
+layout(std430, binding = 2) buffer ssbo_tot_count_buf { uint b_tot_count_buf[BITSET_SIZE]; };
+
+uniform uint u_arr_len;
+uniform uint u_bitset_idx;
+
+void main()
+{
+    for (uint i = 0; i < ITEMS_NUM; i++)
+    {
+        uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
+        if (idx >= u_arr_len) {
+            continue;
+        }
+
+        uint bitset_mask = (BITSET_SIZE - 1) << (BITSET_NUM * u_bitset_idx);
+        uint rad = (b_key_buf[idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
+
+        atomicAdd(b_count_buf[rad * THREAD_BLOCKS_NUM + THREAD_BLOCK_IDX], 1);
+        atomicAdd(b_tot_count_buf[rad], 1);
+    }
+}
