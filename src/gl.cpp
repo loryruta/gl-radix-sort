@@ -17,19 +17,42 @@ rgc::shader::~shader()
 	glDeleteShader(m_name);
 }
 
-void rgc::shader::src_from_mem(const char* buf) const
+void rgc::shader::src_from_txt(char const* txt) const
 {
-	glShaderSource(m_name, 1, &buf, nullptr);
+	glShaderSource(m_name, 1, &txt, nullptr);
 }
 
-void rgc::shader::src_from_file(const std::filesystem::path& filename) const
+void rgc::shader::src_from_spirv(void const* buf, GLsizei buf_len) const
 {
-	std::ifstream f(filename);
-	if (!f.is_open()) {
-		throw std::invalid_argument("The given filename doesn't exist.");
+	glShaderBinary(1, &m_name, GL_SHADER_BINARY_FORMAT_SPIR_V, buf, buf_len);
+	glSpecializeShader(m_name, "main", 0, nullptr, nullptr);
+}
+
+void rgc::shader::src_from_txt_file(std::filesystem::path const& filename) const
+{
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		throw std::invalid_argument("Failed to open text file.");
 	}
-	std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-	src_from_mem(src.c_str());
+
+	std::string src((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	src_from_txt(src.c_str());
+}
+
+void rgc::shader::src_from_spirv_file(std::filesystem::path const& filename) const
+{
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	if (!file.is_open()) {
+		throw std::runtime_error("Failed to open binary file.");
+	}
+
+	auto file_size = file.tellg();
+	std::vector<char> buf(file_size);
+
+	file.seekg(0);
+	file.read(buf.data(), file_size);
+
+	src_from_spirv(buf.data(), (GLsizei) buf.size());
 }
 
 void rgc::shader::compile() const

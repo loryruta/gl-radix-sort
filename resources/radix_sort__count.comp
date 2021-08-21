@@ -18,17 +18,27 @@ layout(std430, binding = 2) buffer ssbo_tot_count_buf { uint b_tot_count_buf[BIT
 uniform uint u_arr_len;
 uniform uint u_bitset_idx;
 
+uint to_loc_idx(uint item_idx, uint thread_idx)
+{
+    return (thread_idx * ITEMS_NUM + item_idx);
+}
+
+uint to_key_idx(uint item_idx, uint thread_idx, uint thread_block_idx)
+{
+    return (thread_block_idx * ITEMS_NUM * THREADS_NUM) + (thread_idx * ITEMS_NUM) + item_idx;
+}
+
 void main()
 {
-    for (uint i = 0; i < ITEMS_NUM; i++)
+    for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
     {
-        uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
-        if (idx >= u_arr_len) {
+        uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+        if (key_idx >= u_arr_len) {
             continue;
         }
 
         uint bitset_mask = (BITSET_SIZE - 1) << (BITSET_NUM * u_bitset_idx);
-        uint rad = (b_key_buf[idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
+        uint rad = (b_key_buf[key_idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
 
         atomicAdd(b_count_buf[rad * THREAD_BLOCKS_NUM + THREAD_BLOCK_IDX], 1);
         atomicAdd(b_tot_count_buf[rad], 1);

@@ -21,7 +21,6 @@ set(SRC
 set(SHADERS
         resources/radix_sort__count.comp
         resources/radix_sort__local_offsets.comp
-        resources/radix_sort__global_offsets.comp
         resources/radix_sort__reorder.comp
         )
 
@@ -32,7 +31,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC third_party/glad/include)
 # shaders
 add_custom_target(
         shaders
-        COMMAND ${CMAKE_COMMAND} -E rm -r "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources"
+        COMMAND ${CMAKE_COMMAND} -E rm -r "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/resources" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources"
         DEPENDS ${SHADERS}
 

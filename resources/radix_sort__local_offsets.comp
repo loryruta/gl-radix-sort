@@ -19,6 +19,16 @@ uniform uint u_thread_blocks_num;
 uniform uint u_depth;
 uniform uint u_op;
 
+uint to_loc_idx(uint item_idx, uint thread_idx)
+{
+    return (thread_idx * ITEMS_NUM + item_idx);
+}
+
+uint to_key_idx(uint item_idx, uint thread_idx, uint thread_block_idx)
+{
+    return (thread_block_idx * ITEMS_NUM * THREADS_NUM) + (thread_idx * ITEMS_NUM) + item_idx;
+}
+
 void main()
 {
     // ------------------------------------------------------------------------------------------------
@@ -30,13 +40,12 @@ void main()
     if (u_op == OP_UPSWEEP)
     {
         // Reduce (upsweep)
-        for (uint i = 0; i < ITEMS_NUM; i++)
+        for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
         {
-            uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
-
-            if (idx % (step * 2) == 0)
+            uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+            if (key_idx % (step * 2) == 0)
             {
-                uint from_idx = idx + (step - 1);
+                uint from_idx = key_idx + (step - 1);
                 uint to_idx = from_idx + step;
 
                 if (to_idx < u_thread_blocks_num)
@@ -55,13 +64,12 @@ void main()
     else if (u_op == OP_DOWNSWEEP)
     {
         // Downsweep
-        for (uint i = 0; i < ITEMS_NUM; i++)
+        for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
         {
-            uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
-
-            if (idx % (step * 2) == 0)
+            uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+            if (key_idx % (step * 2) == 0)
             {
-                uint from_idx = idx + (step - 1);
+                uint from_idx = key_idx + (step - 1);
                 uint to_idx = from_idx + step;
 
                 if (to_idx < u_thread_blocks_num)
@@ -81,14 +89,14 @@ void main()
     }
     else// if (u_op == OP_CLEAR_LAST)
     {
-        for (uint i = 0; i < ITEMS_NUM; i++)
+        for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
         {
-            uint idx = i + ITEMS_NUM * (THREAD_IDX + THREADS_NUM * THREAD_BLOCK_IDX);
-            if (idx == (u_thread_blocks_num - 1))
+            uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+            if (key_idx == (u_thread_blocks_num - 1))
             {
                 for (uint rad = 0; rad < BITSET_SIZE; rad++)
                 {
-                    b_local_offsets_buf[rad * u_thread_blocks_num + idx] = 0;
+                    b_local_offsets_buf[rad * u_thread_blocks_num + key_idx] = 0;
                 }
             }
         }

@@ -11,89 +11,250 @@
 layout(local_size_x = THREADS_NUM, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, binding = 0) buffer ssbo_key            { uint b_key_buf[]; };
-layout(std430, binding = 1) buffer ssbo_local_off_buf  { uint b_local_off_buf[THREAD_BLOCKS_NUM * BITSET_SIZE];  };
-layout(std430, binding = 2) buffer ssbo_glob_count_buf { uint b_glob_count_buf[BITSET_SIZE]; };
+layout(std430, binding = 1) buffer ssbo_local_off_buf  { uint b_local_offsets_buf[]; };
+layout(std430, binding = 2) buffer ssbo_glob_count_buf { uint b_glob_counts_buf[BITSET_SIZE]; };
 
 uniform uint u_arr_len;
 uniform uint u_bitset_idx;
 
-shared uint s_count_buf[BITSET_SIZE];
-shared uint s_key_buf[THREADS_NUM * ITEMS_NUM];
+#define UINT32_MAX uint(-1)
+
+shared uint s_prefix_sum[BITSET_SIZE][THREADS_NUM * ITEMS_NUM];
+shared uint s_key_buf[THREADS_NUM * ITEMS_NUM][2];
+
+uint to_loc_idx(uint item_idx, uint thread_idx)
+{
+    return (thread_idx * ITEMS_NUM + item_idx);
+}
+
+uint to_key_idx(uint item_idx, uint thread_idx, uint thread_block_idx)
+{
+    return (thread_block_idx * ITEMS_NUM * THREADS_NUM) + (thread_idx * ITEMS_NUM) + item_idx;
+}
 
 void main()
 {
-    uint sum;
-
     // ------------------------------------------------------------------------------------------------
     // Global offsets
     // ------------------------------------------------------------------------------------------------
 
-    uint glob_off[BITSET_SIZE];
+    uint glob_off_buf[BITSET_SIZE];
 
     // Exclusive scan
-    uint sum = 0;
-    for (uint i = 0; i < BITSET_SIZE; i++)
+    for (uint sum = 0, i = 0; i < BITSET_SIZE; i++)
     {
-        glob_off[i] = sum;
-        sum += b_glob_count_buf[i];
+        glob_off_buf[i] = sum;
+        sum += b_glob_counts_buf[i];
     }
 
     // ------------------------------------------------------------------------------------------------
     // Radix sort on partition
     // ------------------------------------------------------------------------------------------------
 
-    // Count
-    for (uint i = 0; i < ITEMS_NUM; i++)
+    for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
     {
-        uint idx = i + ITEMS_NUM * (THREAD_IDX + THREAD_BLOCKS_NUM * THREAD_BLOCK_IDX);
-        if (idx < u_arr_len)
-        {
-            uint rad = (b_key_buf[idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
-            atomicAdd(s_count_buf[rad], 1);
-        }
+        uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+        uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+        s_key_buf[loc_idx][0] = key_idx < u_arr_len ? b_key_buf[key_idx] : UINT32_MAX;
+        s_key_buf[loc_idx][1] = UINT32_MAX;
     }
 
     barrier();
 
-    // Inclusive scan
-    uint offsets_buf[BITSET_SIZE];
-    uint sum = 0;
-    for (uint rad = 0; rad < BITSET_SIZE; rad++)
+    // The offset of the bit-groups within the current partition.
+    // It's an array whose value will be overwritten every radix-sort cycle. However, its last value will be used externally.
+    uint in_partition_group_off[BITSET_SIZE];
+
+    uint bitset_idx;
+    for (bitset_idx = 0; bitset_idx <= u_bitset_idx; bitset_idx++)
     {
-        sum += s_count_buf[rad];
-        offsets_buf[rad] = sum;
+        uint bitset_mask = (BITSET_SIZE - 1) << (BITSET_NUM * bitset_idx);
+
+        // Init
+        for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
+        {
+            for (uint bitset_val = 0; bitset_val < BITSET_SIZE; bitset_val++)
+            {
+                uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+                s_prefix_sum[bitset_val][loc_idx] = 0;
+            }
+        }
+
+        barrier();
+
+        // ------------------------------------------------------------------------------------------------
+        // Predicate test
+        // ------------------------------------------------------------------------------------------------
+
+        for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
+        {
+            uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+            if (key_idx < u_arr_len)
+            {
+                uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+                uint k = s_key_buf[loc_idx][bitset_idx % 2];
+                uint bitset_val = (k & bitset_mask) >> (BITSET_NUM * bitset_idx);
+                s_prefix_sum[bitset_val][loc_idx] = 1;
+            }
+        }
+
+        barrier();
+
+        // ------------------------------------------------------------------------------------------------
+        // Exclusive sum
+        // ------------------------------------------------------------------------------------------------
+
+        // Up-sweep
+        for (uint d = 0; d < uint(log2(THREADS_NUM * ITEMS_NUM)); d++)
+        {
+            for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
+            {
+                uint step = uint(exp2(d));
+                uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+
+                if (loc_idx % (step * 2) == 0)
+                {
+                    uint from_idx = loc_idx + (step - 1);
+                    uint to_idx = from_idx + step;
+
+                    if (to_idx < THREADS_NUM * ITEMS_NUM)
+                    {
+                        for (uint bitset_val = 0; bitset_val < BITSET_SIZE; bitset_val++)
+                        {
+                            s_prefix_sum[bitset_val][to_idx] = s_prefix_sum[bitset_val][from_idx] + s_prefix_sum[bitset_val][to_idx];
+                        }
+                    }
+                }
+            }
+
+            barrier();
+        }
+
+        // Clear last
+        if (THREAD_IDX == 0)
+        {
+            for (uint bitset_val = 0; bitset_val < BITSET_SIZE; bitset_val++)
+            {
+                s_prefix_sum[bitset_val][(THREADS_NUM * ITEMS_NUM) - 1] = 0;
+            }
+        }
+
+        barrier();
+
+        // Down-sweep
+        for (int d = int(log2(THREADS_NUM * ITEMS_NUM)) - 1; d >= 0; d--)
+        {
+            for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
+            {
+                uint step = uint(exp2(d));
+                uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+
+                if (loc_idx % (step * 2) == 0)
+                {
+                    uint from_idx = loc_idx + (step - 1);
+                    uint to_idx = from_idx + step;
+
+                    if (to_idx < THREADS_NUM * ITEMS_NUM)
+                    {
+                        for (uint bitset_val = 0; bitset_val < BITSET_SIZE; bitset_val++)
+                        {
+                            uint r = s_prefix_sum[bitset_val][to_idx];
+                            s_prefix_sum[bitset_val][to_idx] = r + s_prefix_sum[bitset_val][from_idx];
+                            s_prefix_sum[bitset_val][from_idx] = r;
+                        }
+                    }
+                }
+            }
+
+            barrier();
+        }
+
+        // ------------------------------------------------------------------------------------------------
+
+        uint last_loc_idx;
+        if (THREAD_BLOCK_IDX == (THREAD_BLOCKS_NUM - 1)) { // The last parititon is, in case, trimmed by the size of the array.
+            last_loc_idx = u_arr_len - (THREAD_BLOCKS_NUM - 1) * (THREADS_NUM * ITEMS_NUM) - 1;
+        } else {
+            last_loc_idx = (THREADS_NUM * ITEMS_NUM) - 1;
+        }
+
+        for (uint sum = 0, i = 0; i < BITSET_SIZE; i++) // Small prefix-sum to calculate group offsets.
+        {
+            in_partition_group_off[i] = sum;
+
+            // Since we need the count of every bit-group, if the last element is the bitset value itself, we need to count it.
+            // Otherwise it will be already counted.
+            bool is_last = ((s_key_buf[last_loc_idx][bitset_idx % 2] & bitset_mask) >> (BITSET_NUM * bitset_idx)) == i;
+            sum += s_prefix_sum[i][last_loc_idx] + (is_last ? 1 : 0);
+        }
+
+        // ------------------------------------------------------------------------------------------------
+        // Shuffling
+        // ------------------------------------------------------------------------------------------------
+
+        for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
+        {
+            uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+            if (key_idx < u_arr_len)
+            {
+                uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+                uint k = s_key_buf[loc_idx][bitset_idx % 2];
+                uint bitset_val = (k & bitset_mask) >> (BITSET_NUM * bitset_idx);
+
+                uint dest_addr = in_partition_group_off[bitset_val] + s_prefix_sum[bitset_val][loc_idx];
+                s_key_buf[dest_addr][(bitset_idx + 1) % 2] = k;
+            }
+        }
+
+        barrier();
     }
 
-    // Shuffling
-    for (uint i = 0; i < ITEMS_NUM; i++)
+    // TODO (REMOVE) WRITE s_prefix_sum
+    /*
+    for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
     {
-        uint idx = i + ITEMS_NUM * (THREAD_IDX + THREAD_BLOCKS_NUM * THREAD_BLOCK_IDX);
-        if (idx < u_arr_len)
+        uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+        if (item_idx < u_arr_len)
         {
-            uint rad = (b_key_buf[idx] & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
-            uint to_idx = offsets_buf[rad] - atomicAdd(s_count_buf[rad], -1);
-            s_key_buf[to_idx] = b_key_buf[idx];
+            uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+            b_key_buf[key_idx] = s_prefix_sum[1][loc_idx];
         }
     }
+    */
 
-    barrier();
-
-    // s_count_buf[rad] = 0; Should already be zeroed
-    // barrier();
+    /*
+    for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
+    {
+        uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+        if (key_idx < u_arr_len)
+        {
+            uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+            b_key_buf[key_idx] = s_key_buf[loc_idx][bitset_idx % 2];
+        }
+    }*/
 
     // ------------------------------------------------------------------------------------------------
     // Scattered writes to sorted partitions
     // ------------------------------------------------------------------------------------------------
 
-    for (uint i = 0; i < ITEMS_NUM; i++)
+    barrier();
+
+    uint bitset_mask = (BITSET_SIZE - 1) << (BITSET_NUM * u_bitset_idx);
+
+    for (uint item_idx = 0; item_idx < ITEMS_NUM; item_idx++)
     {
-        uint k = s_key_buf[THREAD_IDX * ITEMS_NUM + i];
-        uint rad = (k & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
+        uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
+        if (key_idx < u_arr_len)
+        {
+            uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
+            uint k = s_key_buf[loc_idx][bitset_idx % 2];
+            uint rad = (k & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
 
-        uint local_off = b_local_off_buf[THREAD_BLOCK_IDX * BITSET_SIZE + rad];
-        uint glob_off  = b_global_off_buf[rad];
-        uint idx_off   = atomicAdd(s_count_buf[rad], 1);
+            uint loc_off = b_local_offsets_buf[rad * THREAD_BLOCKS_NUM + THREAD_BLOCK_IDX];
+            uint glob_off  = glob_off_buf[rad];
 
-        b_key_buf[glob_off + local_off + idx_off] = k;
+            uint dest_idx = glob_off + loc_off + (loc_idx - in_partition_group_off[rad]);
+            b_key_buf[dest_idx] = k;
+        }
     }
 }

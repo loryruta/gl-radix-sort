@@ -13,8 +13,11 @@ namespace rgc
 		shader(GLenum type);
 		~shader();
 
-		void src_from_mem(char const* buf) const;
-		void src_from_file(std::filesystem::path const& filename) const;
+		void src_from_txt(char const* txt) const;
+		void src_from_spirv(void const* buf, GLsizei buf_len) const;
+
+		void src_from_txt_file(std::filesystem::path const& filename) const;
+		void src_from_spirv_file(std::filesystem::path const& filename) const;
 
 		void compile() const;
 

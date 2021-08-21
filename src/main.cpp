@@ -3,6 +3,7 @@
 #include <random>
 #include <numeric>
 #include <chrono>
+#include <algorithm>
 
 #include "radix_sort.hpp"
 #include "renderdoc.hpp"
@@ -16,9 +17,11 @@ void print_buf(GLuint key_buf, GLuint val_buf, size_t arr_size)
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, key_buf);
 	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, GLsizeiptr(arr_size * sizeof(GLuint)), key_buf_data.data());
 
-	for (size_t i = 0; i < arr_size; i++) {
-		printf("#%zu)\t%d\n", i, key_buf_data[i]);
+	for (int i = 0; i < arr_size; i++) {
+		printf("%4d) %4d %08x\n", i, key_buf_data[i], key_buf_data[i]);
 	}
+
+	fflush(stdout);
 }
 
 void run_app()
@@ -27,20 +30,29 @@ void run_app()
 	// Config
 	// ------------------------------------------------------------------------------------------------
 
-	size_t item_num = 512;
+	size_t items_num = 10;
 	size_t iter_num = 1;
-	using time_unit = std::chrono::milliseconds;
-	char const* time_unit_sign = "ms";
+	GLuint min_val = 10;
+	GLuint max_val = 1000;
+	size_t print_window = 512;
+	bool print_before_after = true;
 
 	// ------------------------------------------------------------------------------------------------
 	// Allocation
 	// ------------------------------------------------------------------------------------------------
 
+	//std::random_device random_dev;
+	//std::mt19937 gen(random_dev());
+	//std::uniform_int_distribution<GLuint> distribution(min_val, max_val);
+
 	GLuint key_buf;
 	glGenBuffers(1, &key_buf);
 	{
-		std::vector<GLuint> data(item_num);
-		std::generate(data.begin(), data.end(), std::rand);
+		std::vector<GLuint> data = { 342,35,234534,7,653247,3,12,22544,6,45,34667,345,23,1234,6437,1665,21324 };
+		items_num = data.size();
+		//std::generate(data.begin(), data.end(), [&]() {
+		//	return distribution(gen);
+		//});
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, key_buf);
 		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(data.size() * sizeof(GLuint)), data.data(), NULL);
@@ -49,14 +61,14 @@ void run_app()
 	GLuint val_buf = NULL;
 	glGenBuffers(1, &val_buf);
 	{
-		std::vector<GLuint> data(item_num);
+		std::vector<GLuint> data(items_num);
 		std::iota(data.begin(), data.end(), 0);
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, val_buf);
 		glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizei(data.size() * sizeof(GLuint)), data.data(), NULL);
 	}
 
-	auto radix_sorter = std::make_unique<rgc::radix_sorter>(item_num);
+	auto radix_sorter = std::make_unique<rgc::radix_sorter>(items_num);
 
 	// ------------------------------------------------------------------------------------------------
 	// Sorting
@@ -64,32 +76,46 @@ void run_app()
 
 	printf("Sorting...\n");
 
-	printf("Num of items: %zu\n", item_num);
+	printf("Num of items: %zu\n", items_num);
 	printf("NUm of iterations: %zu\n", iter_num);
 
 	fflush(stdout);
 
-	time_unit avg_elapsed{0};
+	GLuint query;
+	glGenQueries(1, &query);
 
 	for (int i = 0; i < iter_num; i++)
 	{
-		glFinish();
+		if (print_before_after)
+		{
+			printf("-----------------------------------------------------------------\n");
+			printf("BEFORE SORTING:\n");
+			printf("-----------------------------------------------------------------\n");
 
-		auto now = std::chrono::system_clock::now().time_since_epoch();
+			print_buf(key_buf, val_buf, (size_t) std::min<size_t>(items_num, print_window));
+		}
 
-		radix_sorter->sort(key_buf, val_buf, item_num);
+		glBeginQuery(GL_TIME_ELAPSED, query);
 
-		auto elapsed = std::chrono::duration_cast<time_unit>(std::chrono::system_clock::now().time_since_epoch() - now);
-		printf("%d) Elapsed: %lld %s\n", i, elapsed.count(), time_unit_sign); fflush(stdout);
+		radix_sorter->sort(key_buf, val_buf, items_num);
 
-		avg_elapsed += elapsed;
+		glEndQuery(GL_TIME_ELAPSED);
+
+		GLint elapsed_time;
+		glGetQueryObjectiv(query, GL_QUERY_RESULT, &elapsed_time);
+
+		printf("%04d) Elapsed: %10d ns %10d µs %10d ms\n", i, elapsed_time, elapsed_time / 1000, elapsed_time / (1000 * 1000));
+		fflush(stdout);
+
+		if (print_before_after)
+		{
+			printf("-----------------------------------------------------------------\n");
+			printf("AFTER SORTING:\n");
+			printf("-----------------------------------------------------------------\n");
+
+			print_buf(key_buf, val_buf, (size_t)std::min<size_t>(items_num, print_window));
+		}
 	}
-
-	avg_elapsed /= iter_num;
-
-	printf("Average elapsed time: %lld %s\n", avg_elapsed.count(), time_unit_sign);
-	fflush(stdout);
-
 
 	//
 

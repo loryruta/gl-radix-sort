@@ -17,7 +17,7 @@ namespace rgc
 		size_t m_internal_arr_len;
 
 		GLuint m_local_offsets_buf;
-		GLuint m_global_offsets_buf;
+		GLuint m_glob_counts_buf;
 
 		radix_sorter(size_t init_arr_len = 0);
 		~radix_sorter();
