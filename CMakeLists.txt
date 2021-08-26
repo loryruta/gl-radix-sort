@@ -12,6 +12,8 @@ set(SRC
         src/radix_sort.cpp
         src/renderdoc.hpp
         src/renderdoc.cpp
+        src/sort_test.hpp
+        src/sort_test.cpp
 
         third_party/glad/src/glad.c
         third_party/glad/include/glad/glad.h

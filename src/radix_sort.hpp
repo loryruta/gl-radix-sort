@@ -2,9 +2,12 @@
 
 #include "gl.hpp"
 
+#include <array>
+
 #include <glad/glad.h>
 
-
+#define RGC_RADIX_SORT_BITSET_NUM   4
+#define RGC_RADIX_SORT_BITSET_COUNT ((sizeof(GLuint) * 8) / RGC_RADIX_SORT_BITSET_NUM)
 
 namespace rgc
 {
@@ -17,6 +20,7 @@ namespace rgc
 		size_t m_internal_arr_len;
 
 		GLuint m_local_offsets_buf;
+		GLuint m_scratch_buf;
 		GLuint m_glob_counts_buf;
 
 		radix_sorter(size_t init_arr_len = 0);
@@ -24,7 +28,7 @@ namespace rgc
 
 		void resize_internal_buf(size_t arr_len);
 
-		void sort(GLuint data_buf, GLuint idx_buf, size_t arr_len);
+		void sort(GLuint key_buf, GLuint val_buf, size_t arr_len);
 	};
 }
 
