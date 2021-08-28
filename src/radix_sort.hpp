@@ -17,7 +17,7 @@
 	#include "renderdoc.hpp"
 	#define RGC_RADIX_SORT_RENDERDOC_WATCH(capture, f) rgc::renderdoc::watch(capture, f)
 #else
-	#define RGC_RADIX_SORT_RENDERDOC_WATCH(capture, f)
+	#define RGC_RADIX_SORT_RENDERDOC_WATCH(capture, f) f()
 #endif
 
 inline void __rgc_shader_injector_load_src(GLuint shader, char const* src)
@@ -45,7 +45,7 @@ RGC_SHADER_INJECTOR_INJECTION_POINT
 
 namespace rgc::radix_sort
 {
-	const GLuint k_zero = 0;
+	inline const GLuint k_zero = 0;
 
 	struct shader
 	{
@@ -59,6 +59,22 @@ namespace rgc::radix_sort
 		~shader()
 		{
 			glDeleteShader(m_name);
+		}
+
+		void src_from_txt(char const* txt) const
+		{
+			glShaderSource(m_name, 1, &txt, nullptr);
+		}
+
+		void src_from_txt_file(std::filesystem::path const& filename) const
+		{
+			std::ifstream file(filename);
+			if (!file.is_open()) {
+				throw std::invalid_argument("Failed to open text file.");
+			}
+
+			std::string src((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			src_from_txt(src.c_str());
 		}
 
 		std::string get_info_log() const
@@ -197,7 +213,7 @@ namespace rgc::radix_sort
 		{
 			{
 				shader sh(GL_COMPUTE_SHADER);
-				RGC_SHADER_INJECTOR_LOAD_SRC(sh.m_name, "resources/radix_sort_count.comp");
+				RGC_SHADER_INJECTOR_LOAD_SRC(sh.m_name, "resources/radix_sort_count.comp.glsl");
 				sh.compile();
 
 				m_count_program.attach_shader(sh.m_name);
@@ -206,7 +222,7 @@ namespace rgc::radix_sort
 
 			{
 				shader sh(GL_COMPUTE_SHADER);
-				RGC_SHADER_INJECTOR_LOAD_SRC(sh.m_name, "resources/radix_sort_local_offsets.comp");
+				RGC_SHADER_INJECTOR_LOAD_SRC(sh.m_name, "resources/radix_sort_local_offsets.comp.glsl");
 				sh.compile();
 
 				m_local_offsets_program.attach_shader(sh.m_name);
@@ -215,7 +231,7 @@ namespace rgc::radix_sort
 
 			{
 				shader sh(GL_COMPUTE_SHADER);
-				RGC_SHADER_INJECTOR_LOAD_SRC(sh.m_name, "resources/radix_sort_reorder.comp");
+				RGC_SHADER_INJECTOR_LOAD_SRC(sh.m_name, "resources/radix_sort_reorder.comp.glsl");
 				sh.compile();
 
 				m_reorder_program.attach_shader(sh.m_name);

@@ -20,7 +20,7 @@ rgc::radix_sort::array_compare::array_compare(size_t max_arr_len)
 {
 	{
 		shader sh(GL_COMPUTE_SHADER);
-		sh.src_from_txt_file("resources/sort_test_arr_compare.comp");
+		sh.src_from_txt_file("resources/sort_test_arr_compare.comp.glsl");
 		sh.compile();
 
 		m_program.attach_shader(sh.m_name);
@@ -78,7 +78,7 @@ rgc::radix_sort::check_permuted::check_permuted(GLuint max_val) :
 
 	{
 		shader sh(GL_COMPUTE_SHADER);
-		sh.src_from_txt_file("resources/sort_test_count_elements.comp");
+		sh.src_from_txt_file("resources/sort_test_count_elements.comp.glsl");
 		sh.compile();
 
 		m_count_elements_program.attach_shader(sh.m_name);
@@ -142,7 +142,7 @@ rgc::radix_sort::check_sorted::check_sorted()
 {
 	{
 		shader sh(GL_COMPUTE_SHADER);
-		sh.src_from_txt_file("resources/sort_test_check_sorted.comp");
+		sh.src_from_txt_file("resources/sort_test_check_sorted.comp.glsl");
 		sh.compile();
 
 		m_program.attach_shader(sh.m_name);

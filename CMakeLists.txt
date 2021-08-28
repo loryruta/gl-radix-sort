@@ -24,16 +24,17 @@ set(SRC
         )
 
 set(SHADERS
-        resources/radix_sort_count.comp
-        resources/radix_sort_local_offsets.comp
-        resources/radix_sort_reorder.comp
-        resources/sort_test_arr_compare.comp
-        resources/sort_test_check_sorted.comp
-        resources/sort_test_count_elements.comp
+        resources/radix_sort_count.comp.glsl
+        resources/radix_sort_local_offsets.comp.glsl
+        resources/radix_sort_reorder.comp.glsl
+        resources/sort_test_arr_compare.comp.glsl
+        resources/sort_test_check_sorted.comp.glsl
+        resources/sort_test_count_elements.comp.glsl
     )
 
 add_executable(parallel_radix_sort ${SRC})
 
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${PROJECT_NAME} PUBLIC third_party/glad/include)
 
 # Shaders

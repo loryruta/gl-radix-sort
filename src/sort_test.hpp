@@ -1,6 +1,6 @@
 #pragma once
 
-#include "radix_sort.hpp"
+#include "generated/radix_sort.hpp"
 
 namespace rgc::radix_sort
 {

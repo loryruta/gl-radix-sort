@@ -35,9 +35,10 @@ def inject_shaders(in_filename, out_filename):
         shader_src = shader_f.read()
         shader_f.close()
 
+        shader_src = shader_src.replace("\"", "'")
         shader_src = shader_src.replace("\n", "\\n")
 
-        shader_sources_content += "const char* %s = \"%s\";\n" % (shader_src_name, shader_src)
+        shader_sources_content += "inline const char* %s = \"%s\";\n" % (shader_src_name, shader_src)
 
     content = content[:m.span()[0]] + shader_sources_content + content[m.span()[1]:]
 

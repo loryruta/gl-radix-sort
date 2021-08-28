@@ -3,14 +3,14 @@
 #include <random>
 #include <numeric>
 
-#include "radix_sort.hpp"
-#include "renderdoc.hpp"
+#define RGC_RADIX_SORT_DEBUG
+#include "generated/radix_sort.hpp"
 #include "sort_test.hpp"
 
 #include <GLFW/glfw3.h>
 
-#define RGC_RADIX_SORT_DATA_MAX_VAL 10'000
-#define RGC_RADIX_SORT_ARRAY_LENGTH 30'206'700
+#define RGC_RADIX_SORT_DATA_MAX_VAL 256
+#define RGC_RADIX_SORT_ARRAY_LENGTH 30'000'000
 
 void print_buf(GLuint key_buf, GLuint val_buf, size_t arr_size)
 {
