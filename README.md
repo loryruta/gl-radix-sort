@@ -1,9 +1,9 @@
 
 # GPU radix sort
 
-GPU radix-sort implemented with OpenGL 4.6 and made a header-only library.
+GPU radix sort implemented with OpenGL 4.6 and made a header-only library.
 
-# Include it in your project
+## Use it
 
 - Copy `generated/radix_sort.hpp` in your project.
 - Replace the line `#include <glad/glad.h>`  with your own OpenGL 4.6 loading library include header.
@@ -18,7 +18,7 @@ rgc::radix_sort::sorter sorter(arr_len);
 sorter.sort(GLuint key_buf, GLuint val_buf, size_t arr_len);  
 ```  
 
-# Performance analysis
+## Performance analysis
 Number of elements | Elapsed time (µs) | Elapsed time (ms)
 --- | --- | ---  
 256 | 4247 | 4
@@ -40,7 +40,7 @@ Number of elements | Elapsed time (µs) | Elapsed time (ms)
 16777216 | 197146 | 197
 33554432 | 344191 | 344
 
-# References
+## References
 - http://www.heterogeneouscompute.org/wordpress/wp-content/uploads/2011/06/RadixSort.pdf
 - https://vgc.poly.edu/~csilva/papers/cgf.pdf
 - https://github.com/Devsh-Graphics-Programming/Nabla/tree/radix_sort_tmp
