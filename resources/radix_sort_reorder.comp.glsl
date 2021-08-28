@@ -8,28 +8,47 @@
 #define BITSET_NUM        4
 #define BITSET_SIZE       uint(exp2(BITSET_NUM))
 
+#define UINT32_MAX uint(-1)
+
 layout(local_size_x = THREADS_NUM, local_size_y = 1, local_size_z = 1) in;
 
-layout(std430, binding = 0) restrict readonly buffer in_buffer
+layout(std430, binding = 0) restrict readonly buffer in_keys_buf
+{
+    uint b_in_keys[];
+};
+
+layout(std430, binding = 1) restrict writeonly buffer out_keys_buf
+{
+    uint b_out_keys[];
+};
+
+layout(std430, binding = 2) restrict readonly buffer in_values_buf
 {
     uint b_in_values[];
 };
 
-layout(std430, binding = 1) restrict writeonly buffer out_buffer
+layout(std430, binding = 3) restrict writeonly buffer out_values_buf
 {
     uint b_out_values[];
 };
 
-layout(std430, binding = 2) buffer ssbo_local_off_buf  { uint b_local_offsets_buf[]; };
-layout(std430, binding = 3) buffer ssbo_glob_count_buf { uint b_glob_counts_buf[BITSET_SIZE]; }; // todo
+layout(std430, binding = 4) restrict readonly buffer local_offsets_buf
+{
+    uint b_local_offsets_buf[];
+};
+
+layout(std430, binding = 5) restrict readonly buffer global_counts_buf
+{
+    uint b_glob_counts_buf[BITSET_SIZE];
+};
 
 uniform uint u_arr_len;
 uniform uint u_bitset_idx;
-
-#define UINT32_MAX uint(-1)
+uniform uint u_write_values;
 
 shared uint s_prefix_sum[BITSET_SIZE][THREADS_NUM * ITEMS_NUM];
 shared uint s_key_buf[THREADS_NUM * ITEMS_NUM][2];
+shared uint s_sorted_indices[THREADS_NUM * ITEMS_NUM][2];
 shared uint s_count[BITSET_SIZE];
 
 uint to_partition_radixes_offsets_idx(uint radix, uint thread_block_idx)
@@ -79,8 +98,12 @@ void main()
     {
         uint key_idx = to_key_idx(item_idx, THREAD_IDX, THREAD_BLOCK_IDX);
         uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
-        s_key_buf[loc_idx][0] = key_idx < u_arr_len ? b_in_values[key_idx] : UINT32_MAX; // If the key_idx is outside of the input array then use UINT32_MAX.
+
+        s_key_buf[loc_idx][0] = key_idx < u_arr_len ? b_in_keys[key_idx] : UINT32_MAX; // If the key_idx is outside of the input array then use UINT32_MAX.
         s_key_buf[loc_idx][1] = UINT32_MAX;
+
+        s_sorted_indices[loc_idx][0] = loc_idx;
+        s_sorted_indices[loc_idx][1] = UINT32_MAX;
     }
 
     barrier();
@@ -230,6 +253,7 @@ void main()
             // local offset that depends by the location of the element.
             uint dest_addr = in_partition_group_off[radix] + s_prefix_sum[radix][loc_idx];
             s_key_buf[dest_addr][(bitset_idx + 1) % 2] = k; // Double-buffering is used every cycle the read and write buffer are swapped.
+            s_sorted_indices[dest_addr][(bitset_idx + 1) % 2] = s_sorted_indices[loc_idx][bitset_idx % 2];
         }
 
         barrier();
@@ -243,7 +267,7 @@ void main()
         if (item_idx < u_arr_len)
         {
             uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
-            b_out_values[key_idx] = s_prefix_sum[1][loc_idx];
+            b_out_keys[key_idx] = s_prefix_sum[1][loc_idx];
         }
     }
 
@@ -253,7 +277,7 @@ void main()
         if (key_idx < u_arr_len)
         {
             uint loc_idx = to_loc_idx(item_idx, THREAD_IDX);
-            b_out_values[key_idx] = s_key_buf[loc_idx][bitset_idx % 2];
+            b_out_keys[key_idx] = s_key_buf[loc_idx][bitset_idx % 2];
         }
     }
     */
@@ -261,8 +285,6 @@ void main()
     // ------------------------------------------------------------------------------------------------
     // Scattered writes to sorted partitions
     // ------------------------------------------------------------------------------------------------
-
-    // TODO DUPLICATION ISSUE IS INVOLVED HERE!
 
     uint bitset_mask = (BITSET_SIZE - 1) << (BITSET_NUM * u_bitset_idx);
 
@@ -298,7 +320,7 @@ void main()
             uint k = s_key_buf[to_loc_idx(item_idx, THREAD_IDX)][bitset_idx % 2];
             uint rad = (k & bitset_mask) >> (BITSET_NUM * u_bitset_idx);
 
-            b_out_values[key_idx] = s_count[rad];
+            b_out_keys[key_idx] = s_count[rad];
         }
     }
 
@@ -318,7 +340,12 @@ void main()
             uint local_off = b_local_offsets_buf[to_partition_radixes_offsets_idx(rad, THREAD_BLOCK_IDX)];
 
             uint dest_idx = glob_off + local_off + (loc_idx - in_partition_group_off[rad]);
-            b_out_values[dest_idx] = k;
+            
+            b_out_keys[dest_idx] = k;
+            if (u_write_values != 0)
+            {
+                b_out_values[dest_idx] = b_in_values[THREAD_BLOCK_IDX * (THREADS_NUM * ITEMS_NUM) + s_sorted_indices[loc_idx][bitset_idx % 2]];
+            }
         }
     }
 }
