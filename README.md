@@ -18,15 +18,15 @@ sorter.sort(GLuint key_buf, GLuint val_buf, size_t arr_len);
 ```  
 
 ## Benchmark
-Number of elements | Elapsed time (µs) | Elapsed time (ms)
+Number of elements |  Elapsed time (µs) |  Elapsed time (ms)
 --- | --- | ---
-100 | 10119 | 10
-1000 | 5248 | 5
-10000 | 5739 | 5
-100000 | 10332 | 10
-1000000 | 41106 | 41
-10000000 | 352137 | 352
-100000000 | 104114 | 104
+100 | 27417 | 27
+1000 | 16975 | 16
+10000 | 15987 | 15
+100000 | 14290 | 14
+1000000 | 50830 | 50
+10000000 | 393690 | 393
+100000000 | 607420 | 607
 
 Computed with the following hardware:
 - AMD Ryzen 7 3700X
