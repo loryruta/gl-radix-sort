@@ -10,7 +10,10 @@
 #include <GLFW/glfw3.h>
 
 #define RGC_RADIX_SORT_DATA_MAX_VAL 256
-#define RGC_RADIX_SORT_ARRAY_LENGTH 30'000'000
+#define RGC_RADIX_SORT_MIN_ARRAY_LENGTH     256
+#define RGC_RADIX_SORT_NEXT_ARRAY_LENGTH(n) (n = (n * 2))
+#define RGC_RADIX_SORT_MAX_ARRAY_LENGTH     40'000'000
+#define RGC_RADIX_SORT_AVG_ITER             10
 
 void print_buf(GLuint key_buf, GLuint val_buf, size_t arr_size)
 {
@@ -64,98 +67,91 @@ void save_array(std::filesystem::path const& path, std::vector<GLuint> const& ar
 	}
 }
 
-#define ARR_COMPARE_ITEMS_NUM   4
-#define ARR_COMPARE_THREADS_NUM 64
-
 void run_app()
 {
 	// Array creation
-	printf("Creation of the array...\n");
-	fflush(stdout);
-
 	std::random_device random_device;
 	std::mt19937 generator(random_device());
 	std::uniform_int_distribution<GLuint> distribution(0u, ~0u);
+	std::vector<GLuint> arr(RGC_RADIX_SORT_MAX_ARRAY_LENGTH);
 
-	std::vector<GLuint> arr(RGC_RADIX_SORT_ARRAY_LENGTH);
-	for (size_t i = 0; i < arr.size(); i++) {
-		arr[i] = distribution(generator);
-	}
-
-	//load_or_generate_array(".random_data", RGC_RADIX_SORT_ARRAY_LENGTH, arr);
-	//save_array(".random_data", arr);
-
+	// GPU buffer creation
 	GLuint arr_buf;
 	glGenBuffers(1, &arr_buf);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, arr_buf);
-	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizei) (RGC_RADIX_SORT_ARRAY_LENGTH * sizeof(GLuint)), arr.data(), GL_DYNAMIC_STORAGE_BIT);
+	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizei) (RGC_RADIX_SORT_MAX_ARRAY_LENGTH * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
 
 	// Query creation
 	GLuint query;
 	glGenQueries(1, &query);
 
-	// Debug tools creation
+	// Sorter & checkers creation
+	rgc::radix_sort::sorter sorter(RGC_RADIX_SORT_MAX_ARRAY_LENGTH);
 	rgc::radix_sort::check_permuted check_permuted(RGC_RADIX_SORT_DATA_MAX_VAL);
 	rgc::radix_sort::check_sorted check_sorted;
 
-	// Radix sort
-	auto radix_sorter = std::make_unique<rgc::radix_sort::sorter>(RGC_RADIX_SORT_ARRAY_LENGTH);
+	// File creation
+	std::ofstream benchmark_file("benchmark.csv");
 
-	check_permuted.memorize_original_array(arr_buf, RGC_RADIX_SORT_ARRAY_LENGTH);
+	benchmark_file << "Number of elements, Elapsed time (µs), Elapsed time (ms)" << std::endl;
 
-	// Sort
-	printf("GPU sorting...\n");
-	fflush(stdout);
-
-	glBeginQuery(GL_TIME_ELAPSED, query);
-	radix_sorter->sort(arr_buf, NULL, RGC_RADIX_SORT_ARRAY_LENGTH);
-	glEndQuery(GL_TIME_ELAPSED);
-
-	GLuint elapsed_time;
-	glGetQueryObjectuiv(query, GL_QUERY_RESULT, &elapsed_time);
-
-	printf("Array length: %d - %d us (%d ms)\n",
-		RGC_RADIX_SORT_ARRAY_LENGTH,
-		elapsed_time / 1000,
-		elapsed_time / (1000 * 1000)
-	);
-	fflush(stdout);
-
-	// Save sorted array
-	/*
-	std::vector<GLuint> sorted_arr(arr.size());
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, arr_buf);
-	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, (GLsizeiptr) (RGC_RADIX_SORT_ARRAY_LENGTH * sizeof(GLuint)), sorted_arr.data());
-	save_array(".sorted_data", sorted_arr);*/
-
-	// Check permutation
-	printf("Checking permutation...\n");
-	fflush(stdout);
-
-	check_permuted.memorize_permuted_array(arr_buf, RGC_RADIX_SORT_ARRAY_LENGTH);
-
-	if (!check_permuted.is_permuted())
+	for (size_t arr_len = RGC_RADIX_SORT_MIN_ARRAY_LENGTH; arr_len < RGC_RADIX_SORT_MAX_ARRAY_LENGTH; RGC_RADIX_SORT_NEXT_ARRAY_LENGTH(arr_len))
 	{
-		rgc::renderdoc::watch(false, [&]() { check_permuted.is_permuted(); });
+		printf("Array size: %zu\n", arr_len);
 
-		fprintf(stderr, "Sorting went wrong: elements are not permuted.\n");
-		fflush(stderr);
+		printf("Creation of the array...\n");
+		fflush(stdout);
 
-		return;
+		for (size_t i = 0; i < arr_len; i++) {
+			arr[i] = distribution(generator);
+		}
+
+		printf("Sorting...\n");
+		fflush(stdout);
+
+		GLuint avg_time_elapsed = 0;
+		for (size_t iter = 0; iter < RGC_RADIX_SORT_AVG_ITER; iter++)
+		{
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, arr_buf);
+			glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, (GLsizeiptr) (arr_len * sizeof(GLuint)), arr.data());
+
+			check_permuted.memorize_original_array(arr_buf, arr_len);
+
+			glBeginQuery(GL_TIME_ELAPSED, query);
+			sorter.sort(arr_buf, NULL, arr_len);
+			glEndQuery(GL_TIME_ELAPSED);
+
+			check_permuted.memorize_permuted_array(arr_buf, arr_len);
+
+			if (!check_permuted.is_permuted())
+			{
+				fprintf(stderr, "The array isn't permuted (elements are duplicated or removed). Probably an issue with the sorting algorithm.\n");
+				fflush(stderr);
+
+				exit(1);
+			}
+
+			if (GLuint errors_count; !check_sorted.is_sorted(arr_buf, arr_len, &errors_count))
+			{
+				fprintf(stderr, "The array isn't sorted. Probably an issue with the sorting algorithm.\n");
+				fflush(stderr);
+
+				exit(2);
+			}
+
+			GLuint time_elapsed; glGetQueryObjectuiv(query, GL_QUERY_RESULT, &time_elapsed);
+			avg_time_elapsed += time_elapsed;
+
+		}
+		avg_time_elapsed /= RGC_RADIX_SORT_AVG_ITER;
+
+		fprintf(stdout, "Average time elapsed: %d us (%d ms)\n", avg_time_elapsed / 1000, avg_time_elapsed / (1000 * 1000));
+		fflush(stdout);
+
+		benchmark_file << arr_len << "," << avg_time_elapsed / 1000 << "," << (avg_time_elapsed / (1000 * 1000)) << "\n";
 	}
 
-	// Check sorted
-	printf("Checking sorting...\n");
-	fflush(stdout);
-
-	GLuint errors_count;
-	if (!check_sorted.is_sorted(arr_buf, RGC_RADIX_SORT_ARRAY_LENGTH, &errors_count))
-	{
-		fprintf(stderr, "Sorting went wrong: array not sorted. Number of errors: %d.\n", errors_count);
-		fflush(stderr);
-
-		return;
-	}
+	benchmark_file.close();
 }
 
 void GLAPIENTRY

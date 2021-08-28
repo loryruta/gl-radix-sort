@@ -1,6 +1,6 @@
 #pragma once
 
-#include <glad/glad.h>
+#include <glad/glad.h> // Implement your own OpenGL functions loading library.
 
 #include <array>
 #include <fstream>
