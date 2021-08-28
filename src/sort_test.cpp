@@ -16,10 +16,10 @@ GLuint calc_workgroups_num(GLuint req_dim)
 // array_compare
 // --------------------------------------------------------------------------------------------------------------------------------
 
-rgc::sort_test::array_compare::array_compare(size_t max_arr_len)
+rgc::radix_sort::array_compare::array_compare(size_t max_arr_len)
 {
 	{
-		rgc::shader sh(GL_COMPUTE_SHADER);
+		shader sh(GL_COMPUTE_SHADER);
 		sh.src_from_txt_file("resources/sort_test_arr_compare.comp");
 		sh.compile();
 
@@ -36,13 +36,13 @@ rgc::sort_test::array_compare::array_compare(size_t max_arr_len)
 	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (max_arr_len * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
 }
 
-rgc::sort_test::array_compare::~array_compare()
+rgc::radix_sort::array_compare::~array_compare()
 {
 	glDeleteBuffers(1, &m_errors_counter);
 	glDeleteBuffers(1, &m_error_marks_buf);
 }
 
-GLuint rgc::sort_test::array_compare::compare(GLuint arr_1, GLuint arr_2, size_t arr_len)
+GLuint rgc::radix_sort::array_compare::compare(GLuint arr_1, GLuint arr_2, size_t arr_len)
 {
 	m_program.use();
 
@@ -71,13 +71,13 @@ GLuint rgc::sort_test::array_compare::compare(GLuint arr_1, GLuint arr_2, size_t
 // check_permuted
 // --------------------------------------------------------------------------------------------------------------------------------
 
-rgc::sort_test::check_permuted::check_permuted(GLuint max_val) :
+rgc::radix_sort::check_permuted::check_permuted(GLuint max_val) :
 	m_array_compare(max_val)
 {
 	m_max_val = max_val;
 
 	{
-		rgc::shader sh(GL_COMPUTE_SHADER);
+		shader sh(GL_COMPUTE_SHADER);
 		sh.src_from_txt_file("resources/sort_test_count_elements.comp");
 		sh.compile();
 
@@ -94,13 +94,13 @@ rgc::sort_test::check_permuted::check_permuted(GLuint max_val) :
 	glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizei) (max_val * sizeof(GLuint)), nullptr, GL_DYNAMIC_STORAGE_BIT);
 }
 
-rgc::sort_test::check_permuted::~check_permuted()
+rgc::radix_sort::check_permuted::~check_permuted()
 {
 	glDeleteBuffers(1, &m_original_counts_buf);
 	glDeleteBuffers(1, &m_permuted_counts_buf);
 }
 
-void rgc::sort_test::check_permuted::count_elements(GLuint arr, size_t arr_len, GLuint counts_buf)
+void rgc::radix_sort::check_permuted::count_elements(GLuint arr, size_t arr_len, GLuint counts_buf)
 {
 	m_count_elements_program.use();
 
@@ -119,17 +119,17 @@ void rgc::sort_test::check_permuted::count_elements(GLuint arr, size_t arr_len, 
 	});
 }
 
-void rgc::sort_test::check_permuted::memorize_original_array(GLuint arr, size_t arr_len)
+void rgc::radix_sort::check_permuted::memorize_original_array(GLuint arr, size_t arr_len)
 {
 	count_elements(arr, arr_len, m_original_counts_buf);
 }
 
-void rgc::sort_test::check_permuted::memorize_permuted_array(GLuint arr, size_t arr_len)
+void rgc::radix_sort::check_permuted::memorize_permuted_array(GLuint arr, size_t arr_len)
 {
 	count_elements(arr, arr_len, m_permuted_counts_buf);
 }
 
-bool rgc::sort_test::check_permuted::is_permuted()
+bool rgc::radix_sort::check_permuted::is_permuted()
 {
 	return m_array_compare.compare(m_original_counts_buf, m_permuted_counts_buf, m_max_val) == 0;
 }
@@ -138,10 +138,10 @@ bool rgc::sort_test::check_permuted::is_permuted()
 // check_sorted
 // --------------------------------------------------------------------------------------------------------------------------------
 
-rgc::sort_test::check_sorted::check_sorted()
+rgc::radix_sort::check_sorted::check_sorted()
 {
 	{
-		rgc::shader sh(GL_COMPUTE_SHADER);
+		shader sh(GL_COMPUTE_SHADER);
 		sh.src_from_txt_file("resources/sort_test_check_sorted.comp");
 		sh.compile();
 
@@ -154,12 +154,12 @@ rgc::sort_test::check_sorted::check_sorted()
 	glBufferStorage(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), nullptr, GL_DYNAMIC_STORAGE_BIT);
 }
 
-rgc::sort_test::check_sorted::~check_sorted()
+rgc::radix_sort::check_sorted::~check_sorted()
 {
 	glDeleteBuffers(1, &m_errors_counter);
 }
 
-bool rgc::sort_test::check_sorted::is_sorted(GLuint arr, size_t arr_len, GLuint* errors_count)
+bool rgc::radix_sort::check_sorted::is_sorted(GLuint arr, size_t arr_len, GLuint* errors_count)
 {
 	m_program.use();
 

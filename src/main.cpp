@@ -1,16 +1,12 @@
 #include <iostream>
-#include <fstream>
 #include <vector>
 #include <random>
 #include <numeric>
-#include <chrono>
-#include <algorithm>
 
 #include "radix_sort.hpp"
 #include "renderdoc.hpp"
 #include "sort_test.hpp"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #define RGC_RADIX_SORT_DATA_MAX_VAL 10'000
@@ -28,63 +24,6 @@ void print_buf(GLuint key_buf, GLuint val_buf, size_t arr_size)
 
 	fflush(stdout);
 }
-
-/*
-void print_radix_sort_debug_info(rgc::radix_sorter_debug_info debug_info)
-{
-	char time_buf[256];
-
-	auto us = [](GLint ns) { return ns / 1000; };
-	auto ms = [](GLint ns) { return ns / (1000 * 1000); };
-
-	printf("--------------------------------------------------------------------------------------------------------------------------------\n");
-
-	printf("%-18s%-32s%-32s%-32s%-32s\n",
-		"Iteration",
-		"Initial counting",
-		"Per partition counting",
-		"Per partition prefix sum",
-		"Reordering"
-		);
-
-	// Per iteration phase elapsed time
-	for (int i = 0; i < debug_info.m_iter_elapsed_time.size(); i++)
-	{
-		printf("%-18d", i);
-
-		auto time = debug_info.m_iter_elapsed_time[i];
-
-		for (int iter_phase = 0; iter_phase < rgc::radix_sorter_debug_info::Count; iter_phase++)
-		{
-			sprintf(time_buf, "%d us (%d ms)", us(time[iter_phase]), ms(time[iter_phase]));
-			printf("%-32s", time_buf);
-		}
-
-		printf("\n");
-	}
-
-	// Average elapsed time
-	auto time = debug_info.m_iter_avg_elapsed_time;
-	printf("%-18s", "Average time:");
-	for (int iter_phase = 0; iter_phase < rgc::radix_sorter_debug_info::Count; iter_phase++)
-	{
-		sprintf(time_buf, "%d us (%d ms)", us(time[iter_phase]), ms(time[iter_phase]));
-		printf("%-32s", time_buf);
-	}
-	printf("\n");
-
-	// Total sorting time
-	//printf("%-*s\n", 18 + 32 * 4, "-");
-	printf("--------------------------------------------------------------------------------------------------------------------------------\n");
-
-	printf("%-18s%zu\n", "Items num:", debug_info.m_items_num);
-
-	sprintf(time_buf, "%d us (%d ms)", us(debug_info.m_elapsed_time), ms(debug_info.m_elapsed_time));
-	printf("%-18s%-32s\n", "Sorting time:", time_buf);
-
-	printf("--------------------------------------------------------------------------------------------------------------------------------\n");
-}
-*/
 
 void load_or_generate_array(std::filesystem::path const& path, size_t arr_len, std::vector<GLuint>& res)
 {
@@ -156,11 +95,11 @@ void run_app()
 	glGenQueries(1, &query);
 
 	// Debug tools creation
-	rgc::sort_test::check_permuted check_permuted(RGC_RADIX_SORT_DATA_MAX_VAL);
-	rgc::sort_test::check_sorted check_sorted;
+	rgc::radix_sort::check_permuted check_permuted(RGC_RADIX_SORT_DATA_MAX_VAL);
+	rgc::radix_sort::check_sorted check_sorted;
 
 	// Radix sort
-	auto radix_sorter = std::make_unique<rgc::radix_sorter>(RGC_RADIX_SORT_ARRAY_LENGTH);
+	auto radix_sorter = std::make_unique<rgc::radix_sort::sorter>(RGC_RADIX_SORT_ARRAY_LENGTH);
 
 	check_permuted.memorize_original_array(arr_buf, RGC_RADIX_SORT_ARRAY_LENGTH);
 

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "gl.hpp"
+#include "radix_sort.hpp"
 
-namespace rgc::sort_test
+namespace rgc::radix_sort
 {
 	class array_compare
 	{
 	private:
-		rgc::program m_program;
+		program m_program;
 
 		GLuint m_errors_counter;
 		GLuint m_error_marks_buf;
@@ -24,8 +24,8 @@ namespace rgc::sort_test
 	private:
 		GLuint m_max_val;
 
-		rgc::sort_test::array_compare m_array_compare;
-		rgc::program m_count_elements_program;
+		array_compare m_array_compare;
+		program m_count_elements_program;
 
 		GLuint m_original_counts_buf;
 		GLuint m_permuted_counts_buf;
@@ -44,7 +44,7 @@ namespace rgc::sort_test
 	class check_sorted
 	{
 	private:
-		rgc::program m_program;
+		program m_program;
 
 		GLuint m_errors_counter;
 
