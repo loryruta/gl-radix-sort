@@ -1,11 +1,57 @@
 #pragma once
 
+#ifdef __ANDROID__
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES3/gl3.h>
+#include <GLES3/gl3ext.h>
+#include <GLES3/gl32.h>
+#else
 #include <glad/glad.h> // Implement your own OpenGL functions loading library.
+#endif
 
 #include <array>
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+
+#ifdef __ANDROID__
+// glBufferStorage is not present in OpenGLES 3.2
+static void glBufferStorage(GLenum target, GLsizeiptr size, const void* data, GLbitfield flags)
+{
+	GLenum usage = 0;
+	if (flags & GL_DYNAMIC_STORAGE_BIT)
+	{
+		if (flags & GL_MAP_READ_BIT)
+		{
+			usage = GL_DYNAMIC_READ;
+		}
+		else
+		{
+			usage = GL_DYNAMIC_DRAW;
+		}
+	}
+	else
+	{
+		if (flags & GL_MAP_READ_BIT)
+		{
+			usage = GL_STATIC_READ;
+		}
+		else
+		{
+			usage = GL_STATIC_DRAW;
+		}
+	}
+	glBufferData(target, size, data, usage);
+}
+
+static void ZeroBuffer(GLenum target, size_t size)
+{
+	static std::vector<uint8_t> zeroVec;
+	zeroVec.resize(size, 0);
+	glBufferSubData(target, 0, size, (void*)zeroVec.data());
+}
+#endif
 
 #define RGC_RADIX_SORT_THREADS_PER_BLOCK 64
 #define RGC_RADIX_SORT_ITEMS_PER_THREAD  4
@@ -22,7 +68,14 @@
 
 inline void __rgc_shader_injector_load_src(GLuint shader, char const* src)
 {
-	glShaderSource(shader, 1, &src, nullptr);
+#ifdef __ANDROID__
+	std::string version = "#version 320 es\n";
+#else
+	std::string version = "#version 460\n";
+#endif
+	std::string source = version + src;
+	const GLchar* sourcePtr = source.c_str();
+	glShaderSource(shader, 1, (const GLchar**)&sourcePtr, nullptr);
 }
 
 inline void __rgc_shader_injector_load_src_from_file(GLuint shader, std::filesystem::path const& filename)
@@ -159,7 +212,7 @@ namespace rgc::radix_sort
 
 		static void unuse()
 		{
-			glUseProgram(NULL);
+			glUseProgram(0);
 		}
 	};
 
@@ -190,10 +243,10 @@ namespace rgc::radix_sort
 
 		void resize_internal_buf(size_t arr_len)
 		{
-			if (m_local_offsets_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
-			if (m_glob_counts_buf != NULL)   glDeleteBuffers(1, &m_glob_counts_buf);
-			if (m_keys_scratch_buf != NULL)  glDeleteBuffers(1, &m_keys_scratch_buf);
-			if (m_values_scratch_buf != NULL)  glDeleteBuffers(1, &m_values_scratch_buf);
+			if (m_local_offsets_buf != 0) glDeleteBuffers(1, &m_local_offsets_buf);
+			if (m_glob_counts_buf != 0)   glDeleteBuffers(1, &m_glob_counts_buf);
+			if (m_keys_scratch_buf != 0)  glDeleteBuffers(1, &m_keys_scratch_buf);
+			if (m_values_scratch_buf != 0)  glDeleteBuffers(1, &m_values_scratch_buf);
 
 			m_internal_arr_len = arr_len;
 
@@ -203,15 +256,15 @@ namespace rgc::radix_sort
 
 			glGenBuffers(1, &m_glob_counts_buf);
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_glob_counts_buf);
-			glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizeiptr(RGC_RADIX_SORT_BITSET_SIZE * sizeof(GLuint)), nullptr, NULL);
+			glBufferStorage(GL_SHADER_STORAGE_BUFFER, GLsizeiptr(RGC_RADIX_SORT_BITSET_SIZE * sizeof(GLuint)), nullptr, 0);
 
 			glGenBuffers(1, &m_keys_scratch_buf);
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_keys_scratch_buf);
-			glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (arr_len * sizeof(GLuint)), nullptr, NULL);
+			glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (arr_len * sizeof(GLuint)), nullptr, 0);
 
 			glGenBuffers(1, &m_values_scratch_buf);
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_values_scratch_buf);
-			glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (arr_len * sizeof(GLuint)), nullptr, NULL);
+			glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) (arr_len * sizeof(GLuint)), nullptr, 0);
 		}
 
 	public:
@@ -249,12 +302,12 @@ namespace rgc::radix_sort
 
 		~sorter()
 		{
-			if (m_local_offsets_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
-			if (m_glob_counts_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
-			if (m_keys_scratch_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
+			if (m_local_offsets_buf != 0) glDeleteBuffers(1, &m_local_offsets_buf);
+			if (m_glob_counts_buf != 0) glDeleteBuffers(1, &m_glob_counts_buf);
+			if (m_keys_scratch_buf != 0) glDeleteBuffers(1, &m_keys_scratch_buf);
 		}
 
-		void sorter::sort(GLuint key_buf, GLuint val_buf, size_t arr_len)
+		void sort(GLuint key_buf, GLuint val_buf, size_t arr_len)
 		{
 			if (arr_len <= 1) {
 				return;
@@ -281,10 +334,20 @@ namespace rgc::radix_sort
 				// ------------------------------------------------------------------------------------------------
 
 				glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_glob_counts_buf);
+#ifdef __ANDROID__
+				size_t glob_counts_size = RGC_RADIX_SORT_BITSET_SIZE * sizeof(GLuint);
+				ZeroBuffer(GL_SHADER_STORAGE_BUFFER, glob_counts_size);
+#else
 				glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED, GL_UNSIGNED_INT, &k_zero);
+#endif
 
 				glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_local_offsets_buf);
+#ifdef __ANDROID__
+				size_t local_offsets_size = round_to_power_of_2(calc_thread_blocks_num(arr_len)) * RGC_RADIX_SORT_BITSET_SIZE * sizeof(GLuint);
+				ZeroBuffer(GL_SHADER_STORAGE_BUFFER, local_offsets_size);
+#else
 				glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED, GL_UNSIGNED_INT, &k_zero);
+#endif
 
 				// ------------------------------------------------------------------------------------------------
 				// Counting
@@ -298,7 +361,7 @@ namespace rgc::radix_sort
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_local_offsets_buf);
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_glob_counts_buf);
 
-				glUniform1ui(m_count_program.get_uniform_location("u_arr_len"), arr_len);
+				glUniform1ui(m_count_program.get_uniform_location("u_arr_len"), (GLuint)arr_len);
 				glUniform1ui(m_count_program.get_uniform_location("u_bitset_idx"), pass);
 
 				RGC_RADIX_SORT_RENDERDOC_WATCH(true, [&]()
@@ -367,7 +430,7 @@ namespace rgc::radix_sort
 				glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 0, keys_buffers[pass % 2], 0, (GLsizeiptr) (arr_len * sizeof(GLuint)));
 				glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 1, keys_buffers[(pass + 1) % 2], 0, (GLsizeiptr) (arr_len * sizeof(GLuint)));
 
-				if (val_buf != NULL)
+				if (val_buf != 0)
 				{
 					glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 2, values_buffers[pass % 2], 0, (GLsizeiptr) (arr_len * sizeof(GLuint)));
 					glBindBufferRange(GL_SHADER_STORAGE_BUFFER, 3, values_buffers[(pass + 1) % 2], 0, (GLsizeiptr) (arr_len * sizeof(GLuint)));
@@ -376,8 +439,8 @@ namespace rgc::radix_sort
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_local_offsets_buf);
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_glob_counts_buf);
 
-				glUniform1ui(m_reorder_program.get_uniform_location("u_write_values"), val_buf != NULL);
-				glUniform1ui(m_reorder_program.get_uniform_location("u_arr_len"), arr_len);
+				glUniform1ui(m_reorder_program.get_uniform_location("u_write_values"), val_buf != 0);
+				glUniform1ui(m_reorder_program.get_uniform_location("u_arr_len"), (GLuint)arr_len);
 				glUniform1ui(m_reorder_program.get_uniform_location("u_bitset_idx"), pass);
 
 				RGC_RADIX_SORT_RENDERDOC_WATCH(true, [&]()
