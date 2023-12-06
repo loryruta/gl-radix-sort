@@ -250,8 +250,8 @@ namespace rgc::radix_sort
 		~sorter()
 		{
 			if (m_local_offsets_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
-			if (m_glob_counts_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
-			if (m_keys_scratch_buf != NULL) glDeleteBuffers(1, &m_local_offsets_buf);
+			if (m_glob_counts_buf != NULL) glDeleteBuffers(1, &m_glob_counts_buf);
+			if (m_keys_scratch_buf != NULL) glDeleteBuffers(1, &m_keys_scratch_buf);
 		}
 
 		void sorter::sort(GLuint key_buf, GLuint val_buf, size_t arr_len)
