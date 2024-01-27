@@ -20,19 +20,6 @@ inline GLuint calc_workgroups_num(GLuint req_dim)
   return (GLuint) (ceilf(float(req_dim) / float(RGC_SORT_TEST_THREADS_NUM * RGC_SORT_TEST_ITEMS_NUM)));
 }
 
-template<typename IntegerT>
-IntegerT next_power_of_2(IntegerT n)
-{
-    n--;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n++;
-    return n;
-}
-
 template<typename T>
 void print_buffer(const ShaderStorageBuffer& buffer)
 {

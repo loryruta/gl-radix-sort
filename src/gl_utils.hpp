@@ -247,6 +247,24 @@ namespace glu
         return (IntegerT) ceil(double(n) / double(d));
     }
 
+    template<typename T>
+    bool is_power_of_2(T n)
+    {
+        return (n & (n - 1)) == 0;
+    }
+
+    template<typename IntegerT>
+    IntegerT next_power_of_2(IntegerT n)
+    {
+        n--;
+        n |= n >> 1;
+        n |= n >> 2;
+        n |= n >> 4;
+        n |= n >> 8;
+        n |= n >> 16;
+        n++;
+        return n;
+    }
 } // namespace glu
 
 #endif // GLU_GL_UTILS_HPP

@@ -1,6 +1,7 @@
 add_executable(glu_test
     main.cpp
     reduce_tests.cpp
+    blelloch_scan_tests.cpp
 )
 
 target_link_libraries(glu_test PRIVATE glu_hlib)
