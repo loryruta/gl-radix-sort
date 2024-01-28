@@ -9,6 +9,17 @@
 
 namespace glu
 {
+    inline void
+    copy_buffer(GLuint src_buffer, GLuint dst_buffer, size_t size, size_t src_offset = 0, size_t dst_offset = 0)
+    {
+        glBindBuffer(GL_COPY_READ_BUFFER, src_buffer);
+        glBindBuffer(GL_COPY_WRITE_BUFFER, dst_buffer);
+
+        glCopyBufferSubData(
+            GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, (GLintptr) src_offset, (GLintptr) dst_offset, (GLsizeiptr) size
+        );
+    }
+
     /// A RAII wrapper for GL shader.
     class Shader
     {
@@ -30,7 +41,11 @@ namespace glu
 
         [[nodiscard]] GLuint handle() const { return m_handle; }
 
-        void source_from_str(const char* src_str) { glShaderSource(m_handle, 1, &src_str, nullptr); }
+        void source_from_str(const std::string& src_str)
+        {
+            const char* src_ptr = src_str.c_str();
+            glShaderSource(m_handle, 1, &src_ptr, nullptr);
+        }
 
         void source_from_file(const char* src_filepath)
         {
@@ -180,7 +195,7 @@ namespace glu
             size_t old_size = m_size;
             GLuint old_handle = m_handle;
 
-            if (old_size != m_size)
+            if (old_size != size)
             {
                 m_size = size;
 
@@ -189,14 +204,7 @@ namespace glu
                 glBufferStorage(GL_SHADER_STORAGE_BUFFER, (GLsizeiptr) m_size, nullptr, GL_DYNAMIC_STORAGE_BIT);
 
                 if (keep_data)
-                {
-                    glBindBuffer(GL_COPY_READ_BUFFER, old_handle);
-                    glBindBuffer(GL_COPY_WRITE_BUFFER, m_handle);
-
-                    glCopyBufferSubData(
-                        GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, (GLsizeiptr) std::min(old_size, size)
-                    );
-                }
+                    copy_buffer(old_handle, m_handle, std::min(old_size, size));
 
                 glDeleteBuffers(1, &old_handle);
             }
@@ -264,6 +272,27 @@ namespace glu
         n |= n >> 16;
         n++;
         return n;
+    }
+
+    template<typename T>
+    void print_buffer(const ShaderStorageBuffer& buffer)
+    {
+        std::vector<T> data = buffer.get_data<T>();
+
+        std::string entry_str;
+        for (size_t i = 0; i < data.size(); i++)
+        {
+            printf("(%zu) %s, ", i, std::to_string(data.at(i)).c_str());
+        }
+        printf("\n");
+    }
+
+    inline void print_buffer_hex(const ShaderStorageBuffer& buffer)
+    {
+        std::vector<GLuint> data = buffer.get_data<GLuint>();
+        for (size_t i = 0; i < data.size(); i++)
+            printf("(%zu) %08x, ", i, data[i]);
+        printf("\n");
     }
 } // namespace glu
 
