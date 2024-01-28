@@ -34,7 +34,7 @@ void main()
         s_local_count_buffer[gl_LocalInvocationIndex] = 0;
     }
 
-    memoryBarrierShared();
+    barrier();
 
     if (i < u_count)
     {
@@ -79,7 +79,7 @@ layout(std430, binding = 3) writeonly buffer DstValBuffer
     uint b_dst_val_buffer[];
 };
 
-layout(std430, binding = 4) buffer GlobalCountBuffer
+layout(std430, binding = 4) readonly buffer GlobalCountBuffer
 {
     uint b_global_count_buffer[];
 };
@@ -105,9 +105,9 @@ void prefix_sum()  // Block-wide prefix sum (Blelloch scan)
                 s_prefix_sum_buffer[i] = s_prefix_sum_buffer[i] + s_prefix_sum_buffer[i - step];
             }
         }
-    }
 
-    barrier();
+        barrier();
+    }
 
     // Clear last
     if (thread_i == NUM_THREADS - 1) s_prefix_sum_buffer[thread_i] = 0;
@@ -119,21 +119,11 @@ void prefix_sum()  // Block-wide prefix sum (Blelloch scan)
     for (; step > 0; step >>= 1)
     {
         uint i = thread_i * step + (step - 1);
-        if (i < NUM_THREADS)
+        if (i + step < NUM_THREADS && thread_i % 2 == 0)
         {
-            // Note: the two threads involved in the "swap" belong to the same subgroup
-
-            uint val;
-            if (thread_i % 2 == 0)
-            {
-                val = s_prefix_sum_buffer[i + step];
-            }
-            else // thread_i % 2 == 1
-            {
-                val = s_prefix_sum_buffer[i] + s_prefix_sum_buffer[i - step];
-            }
-
-            s_prefix_sum_buffer[i] = val;
+            uint tmp = s_prefix_sum_buffer[i];
+            s_prefix_sum_buffer[i] = s_prefix_sum_buffer[i + step];
+            s_prefix_sum_buffer[i + step] = tmp + s_prefix_sum_buffer[i + step];
         }
 
         barrier();
