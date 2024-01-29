@@ -1,36 +1,86 @@
 
-# GPU radix sort
+# GLU: openGL Utilities
 
-GPU radix sort implemented with OpenGL 4.6 and made a header-only library.
+Ready to use primitives for parallel programming, implemented in OpenGL 4.6.
 
-## Include it in your project
-- Copy `generated/radix_sort.hpp` in your project.
-- Replace the line `#include <glad/glad.h>`  with your own OpenGL 4.6 loading library include header.
+Currently, includes: Reduce, BlellochScan, RadixSort
 
-Now you can use the radix sort through the following code:
-```c++  
-GLuint key_buf; // The GL_SHADER_STORAGE_BUFFER of keys to sort.  
-GLuint val_buf; // The GL_SHADER_STORAGE_BUFFER of values that will be sorted along with the keys.  
-size_t arr_len; // The length of both buffers (that should be the same).  
-  
-rgc::radix_sort::sorter sorter(arr_len);
-sorter.sort(GLuint key_buf, GLuint val_buf, size_t arr_len);  
-```  
+## How to include it
 
-## Benchmark
-Number of elements |  Elapsed time (µs) |  Elapsed time (ms)
---- | --- | ---
-100 | 27417 | 27
-1000 | 16975 | 16
-10000 | 15987 | 15
-100000 | 14290 | 14
-1000000 | 50830 | 50
-10000000 | 393690 | 393
-100000000 | 607420 | 607
+### Copy-paste the utility file
 
-Computed with the following hardware:
-- AMD Ryzen 7 3700X
-- NVIDIA GeForce RTX 2060 SUPER
+- Look into the `dist/` directory
+- Take a utility (e.g. `dist/Reduce.hpp`)
+- Copy the file in your codebase
+- Include it where you need it
+  - **Important: OpenGL 4.6 symbols must be defined prior the utility file!** E.g.:
+
+```cpp
+#include <glad/glad.h>  // Must be placed earlier! 
+#include "Reduce.hpp"
+```
+
+### git submodule + CMake
+
+- Git submodule this project into your codebase
+- Add CMake subdirectory and link to the `glu` target
+
+```cmake
+add_subdirectory(path/to/glu)
+
+target_link_libraries(your_project PUBLIC glu)
+```
+
+## How to use it
+
+### Reduce
+
+```cpp
+#include "Reduce.hpp"
+
+using namespace glu;
+
+size_t N;
+GLuint buffer;  // SSBO containing N GLuint (of size N * sizeof(GLuint))
+
+Reduce reduce(DataType_Uint, ReduceOperator_Sum);
+reduce(buffer, N);
+```
+
+### BlellochScan
+
+```cpp
+#include "Blelloch.hpp"
+
+using namespace glu;
+
+size_t N;       // Important: N must be a power of 2
+GLuint buffer;  // SSBO containing N GLuint (of size N * sizeof(GLuint))
+
+BlellochScan blelloch_scan(DataType_Uint);
+blelloch_scan(buffer, N);
+```
+
+### RadixSort
+
+```cpp
+#include "RadixSort.hpp"
+
+using namespace glu;
+
+size_t N;
+GLuint key_buffer;  // SSBO containing N GLuint (of size N * sizeof(GLuint))
+GLuint val_buffer;  // SSBO containing N GLuint (of size N * sizeof(GLuint))
+
+RadixSort radix_sort;
+radix_sort(buffer, N);
+```
+
+Note: currently `val_buffer` is required and its type is `GLuint`.
+
+## Performance
+
+TODO
 
 ## References
 - http://www.heterogeneouscompute.org/wordpress/wp-content/uploads/2011/06/RadixSort.pdf
