@@ -25,13 +25,15 @@ layout(location = 1) uniform uint u_step;
 
 void main()
 {
+    uint partition_i = gl_WorkGroupID.y;
     uint thread_i = gl_WorkGroupID.x * NUM_THREADS + gl_SubgroupID * gl_SubgroupSize + gl_SubgroupInvocationID;
-    uint i = thread_i * u_step + u_step - 1;
-    if (i < u_count)
+    uint i = partition_i * u_count + thread_i * u_step + u_step - 1;
+    uint end_i = (partition_i + 1) * u_count;
+    if (i < end_i)
     {
         DATA_TYPE lval = subgroupShuffleUp(data[i], 1);
         DATA_TYPE r = OPERATION(data[i], lval);
-        if (i == u_count - 1)  // Clear last
+        if (i == end_i - 1)  // Clear last
         {
             data[i] = IDENTITY;
         }
@@ -56,16 +58,17 @@ layout(location = 1) uniform uint u_step;
 
 void main()
 {
-    uint i = gl_GlobalInvocationID.x * (u_step << 1) + (u_step - 1);
+    uint partition_i = gl_WorkGroupID.y;
+    uint i = partition_i * u_count + gl_GlobalInvocationID.x * (u_step << 1) + (u_step - 1);
     uint next_i = i + u_step;
-
-    if (next_i < u_count)
+    uint end_i = (partition_i + 1) * u_count;
+    if (next_i < end_i)
     {
         DATA_TYPE tmp = data[i];
         data[i] = data[next_i];
         data[next_i] = data[next_i] + tmp;
     }
-    else if (i < u_count)
+    else if (i < end_i)
     {
         data[i] = IDENTITY;
     }
@@ -119,21 +122,24 @@ void main()
 
         ~BlellochScan() = default;
 
-        /// Runs Blelloch exclusive scan.
+        /// Runs Blelloch exclusive scan on multiple partitions.
+        ///
         /// @param buffer the input GLuint buffer
         /// @param count the number of GLuint in the buffer (must be a power of 2)
-        void operator()(GLuint buffer, size_t count)
+        /// @param num_partitions the number of partitions (must be adjacent)
+        void operator()(GLuint buffer, size_t count, size_t num_partitions = 1)
         {
             GLU_CHECK_ARGUMENT(buffer, "Invalid buffer");
             GLU_CHECK_ARGUMENT(count > 0, "Count must be greater than zero");
             GLU_CHECK_ARGUMENT(is_power_of_2(count), "Count must be a power of 2"); // TODO Remove this requirement
+            GLU_CHECK_ARGUMENT(num_partitions >= 1, "Num of partitions must be >= 1");
 
-            upsweep(buffer, count); // Also clear last
-            downsweep(buffer, count);
+            upsweep(buffer, count, num_partitions); // Also clear last
+            downsweep(buffer, count, num_partitions);
         }
 
     private:
-        void upsweep(GLuint buffer, size_t count) // Also clear last
+        void upsweep(GLuint buffer, size_t count, size_t num_partitions) // Also clear last
         {
             m_upsweep_program.use();
 
@@ -147,7 +153,7 @@ void main()
                 glUniform1ui(m_upsweep_program.get_uniform_location("u_step"), step);
 
                 size_t num_workgroups = div_ceil<size_t>(level_count, m_num_threads);
-                glDispatchCompute(num_workgroups, 1, 1);
+                glDispatchCompute(num_workgroups, num_partitions, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
                 step <<= 1;
@@ -159,7 +165,7 @@ void main()
             }
         }
 
-        void downsweep(GLuint buffer, size_t count)
+        void downsweep(GLuint buffer, size_t count, size_t num_partitions)
         {
             m_downsweep_program.use();
 
@@ -173,7 +179,7 @@ void main()
                 glUniform1ui(m_downsweep_program.get_uniform_location("u_step"), step);
 
                 size_t num_workgroups = div_ceil(level_count, m_num_threads);
-                glDispatchCompute(num_workgroups, 1, 1);
+                glDispatchCompute(num_workgroups, num_partitions, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
                 step >>= 1;

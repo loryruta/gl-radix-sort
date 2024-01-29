@@ -235,6 +235,13 @@ namespace glu
             glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, (GLsizeiptr) m_size, result.data());
             return result;
         }
+
+        void bind(GLuint index, size_t size = 0, size_t offset = 0)
+        {
+            if (size == 0)
+                size = m_size;
+            glBindBufferRange(GL_SHADER_STORAGE_BUFFER, index, m_handle, (GLintptr) offset, (GLsizeiptr) size);
+        }
     };
 
     template<typename IntegerT>
@@ -274,17 +281,23 @@ namespace glu
         return n;
     }
 
+    template<typename Iterator>
+    void print_stl_container(Iterator begin, Iterator end)
+    {
+        size_t i = 0;
+        for (; begin != end; begin++)
+        {
+            printf("(%zu) %s, ", i, std::to_string(*begin).c_str());
+            i++;
+        }
+        printf("\n");
+    }
+
     template<typename T>
     void print_buffer(const ShaderStorageBuffer& buffer)
     {
         std::vector<T> data = buffer.get_data<T>();
-
-        std::string entry_str;
-        for (size_t i = 0; i < data.size(); i++)
-        {
-            printf("(%zu) %s, ", i, std::to_string(data.at(i)).c_str());
-        }
-        printf("\n");
+        print_stl_container(data.begin(), data.end());
     }
 
     inline void print_buffer_hex(const ShaderStorageBuffer& buffer)

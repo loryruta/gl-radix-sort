@@ -44,3 +44,39 @@ TEST_CASE("BlellochScan-multiple-sizes")
     std::exclusive_scan(data.begin(), data.end(), expected.begin(), 0);
     REQUIRE(buffer.get_data<GLuint>() == expected);
 }
+
+TEST_CASE("BlellochScan-multiple-partitions")
+{
+    const uint64_t k_seed = 123;
+    const size_t k_num_elements = 1024;
+    const size_t k_num_partitions = GENERATE(1, 32, 100, 1000);
+
+    Random random(k_seed);
+
+    // Generate a random buffer containing data for all partitions
+    std::vector<GLuint> data = random.sample_int_vector<GLuint>(k_num_elements * k_num_partitions, 0, 100);
+
+    ShaderStorageBuffer buffer(data);
+
+    // Run blelloch scan on all partitions
+    BlellochScan blelloch_scan(DataType_Uint);
+    blelloch_scan(buffer.handle(), k_num_elements, k_num_partitions);
+
+    // Get the result host-side
+    std::vector<GLuint> result = buffer.get_data<GLuint>();
+
+    auto data_begin = data.begin();
+    auto result_begin = result.begin();
+
+    // Check that exclusive scan was run for every partition
+    for (int partition = 0; partition < k_num_partitions; partition++)
+    {
+        std::vector<GLuint> expected_result(k_num_elements);
+        std::exclusive_scan(data_begin, data_begin + k_num_elements, expected_result.begin(), 0);
+
+        REQUIRE(std::memcmp(expected_result.data(), &(*result_begin), k_num_elements * sizeof(GLuint)) == 0);
+
+        data_begin += k_num_elements;
+        result_begin += k_num_elements;
+    }
+}
