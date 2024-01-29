@@ -25,4 +25,5 @@ target_include_directories(renderdoc INTERFACE third_party/renderdoc)
 add_library(glu INTERFACE)
 target_include_directories(glu INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# TODO optionally add test subdirectory (e.g. don't add if configuring in git submodule)
 add_subdirectory(test)
