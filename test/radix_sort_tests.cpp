@@ -1,12 +1,15 @@
+#include <algorithm>
+#include <cinttypes>
+#include <unordered_map>
+#include <vector>
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
-#include <cinttypes>
 #include <glad/glad.h>
 
 #include "RadixSort.hpp"
 #include "util/Random.hpp"
-#include "util/misc_utils.hpp"
 
 using namespace glu;
 

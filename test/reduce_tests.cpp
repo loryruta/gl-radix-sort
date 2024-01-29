@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 
 #include "Reduce.hpp"
-#include "util/misc_utils.hpp"
+#include "util/Random.hpp"
 
 using namespace glu;
 using namespace Catch::Matchers;
@@ -147,16 +147,11 @@ TEST_CASE("Reduce-subgroup-fitting-size")
 {
     const size_t k_num_elements = GENERATE(32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072);
 
-    // TODO init random with same seed
+    const uint64_t k_seed = 1;
+    Random random(k_seed);
 
-    std::vector<uint32_t> data(k_num_elements);
-    uint32_t sum = 0;
-    for (size_t i = 0; i < k_num_elements; i++)
-    {
-        uint32_t n = random_int<uint32_t>(0, 100);
-        data[i] = n;
-        sum += n;
-    }
+    std::vector<GLuint> data = random.sample_int_vector<GLuint>(k_num_elements, 0, 100);
+    GLuint sum = std::accumulate(data.begin(), data.end(), GLuint(0));
 
     ShaderStorageBuffer buffer(data.data(), data.size() * sizeof(uint32_t));
 
@@ -171,20 +166,17 @@ TEST_CASE("Reduce-subgroup-non-fitting-size")
 {
     const size_t k_num_elements = GENERATE(1, 31, 93, 201, 693, 2087, 7358, 88289, 345897, 6094798, 5238082, 10043898);
 
-    std::vector<uint32_t> data(k_num_elements);
-    uint32_t sum = 0;
-    for (size_t i = 0; i < k_num_elements; i++)
-    {
-        uint32_t n = random_int<uint32_t>(0, 100);
-        data[i] = n;
-        sum += n;
-    }
+    const uint64_t k_seed = 1;
+    Random random(k_seed);
 
-    ShaderStorageBuffer buffer(data.data(), data.size() * sizeof(uint32_t));
+    std::vector<GLuint> data = random.sample_int_vector<GLuint>(k_num_elements, 0, 100);
+    GLuint sum = std::accumulate(data.begin(), data.end(), GLuint(0));
+
+    ShaderStorageBuffer buffer(data.data(), data.size() * sizeof(GLuint));
 
     Reduce reduce(DataType_Uint, ReduceOperator_Sum);
     reduce(buffer.handle(), data.size());
 
-    uint32_t calc_sum = buffer.get_data<uint32_t>()[0];
+    GLuint calc_sum = buffer.get_data<GLuint>()[0];
     CHECK(calc_sum == sum);
 }

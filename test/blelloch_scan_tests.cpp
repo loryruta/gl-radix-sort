@@ -5,7 +5,6 @@
 
 #include "BlellochScan.hpp"
 #include "util/Random.hpp"
-#include "util/misc_utils.hpp"
 
 using namespace glu;
 
