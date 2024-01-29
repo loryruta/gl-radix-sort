@@ -1,6 +1,7 @@
 #ifndef GLU_RADIXSORT_HPP
 #define GLU_RADIXSORT_HPP
 
+#include "BlellochScan.hpp"
 #include "gl_utils.hpp"
 
 namespace glu
@@ -15,41 +16,43 @@ layout(std430, binding = 0) readonly buffer KeyBuffer
     uint b_key_buffer[];
 };
 
-layout(std430, binding = 1) buffer GlobalCountBuffer
+layout(std430, binding = 1) buffer BlockCountBuffer
+{
+    uint b_block_count_buffer[]; // 16 * NUM_THREADS
+};
+
+layout(std430, binding = 2) buffer GlobalCountBuffer
 {
     uint b_global_count_buffer[];
 };
 
 layout(location = 0) uniform uint u_count;
 layout(location = 1) uniform uint u_radix_shift;
-
-shared uint s_local_count_buffer[16];
+layout(location = 2) uniform uint u_num_blocks_power_of_2;
 
 void main()
 {
-    uint i = gl_GlobalInvocationID.x;
-
-    if (gl_LocalInvocationIndex < 16)
+    for (uint radix = 0; radix < 16; radix++)
     {
-        s_local_count_buffer[gl_LocalInvocationIndex] = 0;
+        b_block_count_buffer[radix * u_num_blocks_power_of_2 + gl_WorkGroupID.x] = 0;
     }
 
     barrier();
 
+    uint i = gl_GlobalInvocationID.x;
     if (i < u_count)
     {
         // Block-wide count on shared memory
         uint radix = (b_key_buffer[i] >> u_radix_shift) & 0xf;
-        atomicAdd(s_local_count_buffer[radix], 1);
+        atomicAdd(b_block_count_buffer[radix * u_num_blocks_power_of_2 + gl_WorkGroupID.x], 1);
     }
 
     barrier();
 
     if (gl_LocalInvocationIndex < 16)
     {
-        // Dispatch-wide count on global memory
-        uint local_count = s_local_count_buffer[gl_LocalInvocationIndex];
-        atomicAdd(b_global_count_buffer[gl_LocalInvocationIndex], local_count);
+        uint block_count = b_block_count_buffer[gl_LocalInvocationIndex * u_num_blocks_power_of_2 + gl_WorkGroupID.x];
+        atomicAdd(b_global_count_buffer[gl_LocalInvocationIndex], block_count);
     }
 }
 )";
@@ -79,13 +82,19 @@ layout(std430, binding = 3) writeonly buffer DstValBuffer
     uint b_dst_val_buffer[];
 };
 
-layout(std430, binding = 4) readonly buffer GlobalCountBuffer
+layout(std430, binding = 4) readonly buffer BlockOffsetBuffer
+{
+    uint b_block_offset_buffer[];
+};
+
+layout(std430, binding = 5) readonly buffer GlobalCountBuffer
 {
     uint b_global_count_buffer[];
 };
 
 layout(location = 0) uniform uint u_count;
 layout(location = 1) uniform uint u_radix_shift;
+layout(location = 2) uniform uint u_num_blocks_power_of_2;
 
 shared uint s_global_offset_buffer[16];
 shared uint s_prefix_sum_buffer[NUM_THREADS];
@@ -162,9 +171,12 @@ void main()
 
         if (should_place)
         {
-            uint offset = s_global_offset_buffer[radix] + s_prefix_sum_buffer[thread_i];
-            b_dst_key_buffer[offset] = b_src_key_buffer[i];
-            b_dst_val_buffer[offset] = b_src_val_buffer[i];
+            uint di =
+                s_global_offset_buffer[radix] +
+                b_block_offset_buffer[radix * u_num_blocks_power_of_2 + gl_WorkGroupID.x] +
+                s_prefix_sum_buffer[thread_i];
+            b_dst_key_buffer[di] = b_src_key_buffer[i];
+            b_dst_val_buffer[di] = b_src_val_buffer[i];
         }
     }
 }
@@ -175,23 +187,28 @@ void main()
     {
     private:
         Program m_count_program;
+        BlellochScan m_blelloch_scan;
         Program m_reorder_program;
 
-        const size_t m_num_threads;
+        /// A GLuint buffer of size 16 * NUM_THREADS that stores the counts of radixes per block.
+        ShaderStorageBuffer m_block_count_buffer;
 
-        /// A buffer of size 16 * sizeof(GLuint) that stores the global counts of radixes.
-        ShaderStorageBuffer m_count_buffer;
+        /// A GLuint buffer of size 16 that stores the global counts of radixes.
+        ShaderStorageBuffer m_global_count_buffer;
 
         ShaderStorageBuffer m_key_scratch_buffer;
         ShaderStorageBuffer m_val_scratch_buffer;
 
+        const size_t m_num_threads;
+
     public:
         explicit RadixSort() :
+            m_blelloch_scan(DataType_Uint),
             m_num_threads(1024)
         {
             GLU_CHECK_ARGUMENT(is_power_of_2(m_num_threads), "Num threads must be a power of 2");
 
-            m_count_buffer.resize(16 * sizeof(GLuint));
+            m_global_count_buffer.resize(16 * sizeof(GLuint));
 
             std::string shader_src = "#version 460\n\n";
             shader_src += "#define NUM_THREADS " + std::to_string(m_num_threads) + "\n";
@@ -225,16 +242,30 @@ void main()
             if (count <= 1)
                 return; // Hey, that's already sorted x)
 
-            size_t num_workgroups = div_ceil(count, size_t(1024));
+            size_t num_blocks = div_ceil(count, size_t(1024));
+            size_t num_blocks_power_of_2 = next_power_of_2(num_blocks); // Required by BlellochScan
 
-            if (m_key_scratch_buffer.size() < count)
+            size_t required_size;
+
+            required_size = next_power_of_2(16 * num_blocks_power_of_2) * sizeof(GLuint);
+            if (m_block_count_buffer.size() < required_size)
             {
-                m_key_scratch_buffer.resize(next_power_of_2(count) * sizeof(GLuint), false);
+                m_block_count_buffer.resize(required_size, false);
+                printf("[RadixSort] Block count buffer reallocated to: %zu\n", required_size);
             }
 
-            if (m_val_scratch_buffer.size() < count)
+            required_size = next_power_of_2(count) * sizeof(GLuint);
+            if (m_key_scratch_buffer.size() < required_size)
             {
-                m_val_scratch_buffer.resize(next_power_of_2(count) * sizeof(GLuint), false);
+                m_key_scratch_buffer.resize(required_size, false);
+                printf("[RadixSort] Key scratch buffer reallocated to: %zu\n", required_size);
+            }
+
+            required_size = next_power_of_2(count) * sizeof(GLuint);
+            if (m_val_scratch_buffer.size() < required_size)
+            {
+                m_val_scratch_buffer.resize(required_size, false);
+                printf("[RadixSort] Val scratch buffer reallocated to: %zu\n", required_size);
             }
 
             GLuint key_buffers[]{key_buffer, m_key_scratch_buffer.handle()};
@@ -244,18 +275,25 @@ void main()
             {
                 // ---------------------------------------------------------------- Counting
 
-                m_count_buffer.clear(0);
+                m_block_count_buffer.clear(0);
+                m_global_count_buffer.clear(0);
 
                 m_count_program.use();
 
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_buffers[i % 2]);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_count_buffer.handle());
+                m_block_count_buffer.bind(1);
+                m_global_count_buffer.bind(2);
 
                 glUniform1ui(m_count_program.get_uniform_location("u_count"), count);
                 glUniform1ui(m_count_program.get_uniform_location("u_radix_shift"), i << 2);
+                glUniform1ui(m_count_program.get_uniform_location("u_num_blocks_power_of_2"), num_blocks_power_of_2);
 
-                glDispatchCompute(num_workgroups, 1, 1);
+                glDispatchCompute(num_blocks, 1, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+                // ---------------------------------------------------------------- Prefix sum
+
+                m_blelloch_scan(m_block_count_buffer.handle(), num_blocks_power_of_2, 16);
 
                 // ---------------------------------------------------------------- Reordering
 
@@ -265,12 +303,14 @@ void main()
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, val_buffers[i % 2]);
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, key_buffers[(i + 1) % 2]);
                 glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, val_buffers[(i + 1) % 2]);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_count_buffer.handle());
+                m_block_count_buffer.bind(4);
+                m_global_count_buffer.bind(5);
 
                 glUniform1ui(m_reorder_program.get_uniform_location("u_count"), count);
                 glUniform1ui(m_reorder_program.get_uniform_location("u_radix_shift"), i << 2);
+                glUniform1ui(m_reorder_program.get_uniform_location("u_num_blocks_power_of_2"), num_blocks_power_of_2);
 
-                glDispatchCompute(num_workgroups, 1, 1);
+                glDispatchCompute(num_blocks, 1, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
             }
         }

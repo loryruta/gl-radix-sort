@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
-#include <glad/glad.h>
 #include <cinttypes>
+#include <glad/glad.h>
 
 #include "RadixSort.hpp"
 #include "util/Random.hpp"
@@ -20,7 +20,8 @@ namespace
         for (const T& entry : vector)
         {
             auto [iterator, inserted] = histogram.emplace(entry, 1);
-            if (!inserted) iterator->second++;
+            if (!inserted)
+                iterator->second++;
         }
         return histogram;
     }
@@ -31,8 +32,8 @@ namespace
     {
         CHECK(vector1.size() == vector2.size());
 
-        auto histogram1 = build_value_histogram(vector1);
-        auto histogram2 = build_value_histogram(vector2);
+        std::unordered_map<T, size_t> histogram1 = build_value_histogram(vector1);
+        std::unordered_map<T, size_t> histogram2 = build_value_histogram(vector2);
         CHECK(histogram1 == histogram2);
     }
 
@@ -43,18 +44,18 @@ namespace
         CAPTURE(vector);
         CHECK(std::is_sorted(vector.begin(), vector.end()));
     }
-}
+} // namespace
 
 TEST_CASE("RadixSort-simple", "[.]")
 {
-    const size_t k_num_elements = 174;//GENERATE(range(100, 200));
+    const size_t k_num_elements = 10;
 
-    const uint64_t k_seed = 1;//GENERATE(range(0, 10));
+    const uint64_t k_seed = 1;
     Random random(k_seed);
 
     printf("Num elements: %zu; Seed: %" PRIu64 "\n", k_num_elements, k_seed);
 
-    std::vector<GLuint> keys = random.sample_int_vector<GLuint>(k_num_elements, 0, 10);
+    std::vector<GLuint> keys = random.sample_int_vector<GLuint>(k_num_elements, 0, UINT32_MAX);
     std::vector<GLuint> vals(k_num_elements);
 
     REQUIRE(keys.size() == vals.size());
@@ -62,16 +63,16 @@ TEST_CASE("RadixSort-simple", "[.]")
     ShaderStorageBuffer key_buffer(keys);
     ShaderStorageBuffer val_buffer(vals);
 
-//    printf("Input; Key buffer:\n");
-//    print_buffer<GLuint>(key_buffer);
-//    print_buffer_hex(key_buffer);
+    printf("Input; Key buffer:\n");
+    print_buffer<GLuint>(key_buffer);
+    print_buffer_hex(key_buffer);
 
     RadixSort radix_sort;
     radix_sort(key_buffer.handle(), val_buffer.handle(), keys.size());
 
-//    printf("Output; Key buffer:\n");
-//    print_buffer<GLuint>(key_buffer);
-//    print_buffer_hex(key_buffer);
+    printf("Output; Key buffer:\n");
+    print_buffer<GLuint>(key_buffer);
+    print_buffer_hex(key_buffer);
 
     std::vector<GLuint> sorted_keys = key_buffer.get_data<GLuint>();
 
@@ -79,13 +80,65 @@ TEST_CASE("RadixSort-simple", "[.]")
     check_sorted(sorted_keys);
 }
 
-TEST_CASE("RadixSort-1024", "[.]")
+TEST_CASE("RadixSort-128-256-512-1024")
 {
-    const uint64_t k_seed = 123;
+    const size_t k_num_elements = GENERATE(128, 256, 512, 1024);
+
+    const uint64_t k_seed = 1;
     Random random(k_seed);
 
-    std::vector<GLuint> keys = random.sample_int_vector<GLuint>(1024, 0, 100);
-    std::vector<GLuint> vals = random.sample_int_vector<GLuint>(1024, 100, 200);
+    printf("Num elements: %zu; Seed: %" PRIu64 "\n", k_num_elements, k_seed);
+
+    std::vector<GLuint> keys = random.sample_int_vector<GLuint>(k_num_elements, 0, UINT32_MAX);
+    std::vector<GLuint> vals(k_num_elements);
+
+    ShaderStorageBuffer key_buffer(keys);
+    ShaderStorageBuffer val_buffer(vals);
+
+    RadixSort radix_sort;
+    radix_sort(key_buffer.handle(), val_buffer.handle(), keys.size());
+
+    std::vector<GLuint> sorted_keys = key_buffer.get_data<GLuint>();
+
+    check_permutation(keys, sorted_keys);
+    check_sorted(sorted_keys);
+}
+
+TEST_CASE("RadixSort-2048")
+{
+    const size_t k_num_elements = 2048;
+
+    const uint64_t k_seed = 1;
+    Random random(k_seed);
+
+    printf("Num elements: %zu; Seed: %" PRIu64 "\n", k_num_elements, k_seed);
+
+    std::vector<GLuint> keys = random.sample_int_vector<GLuint>(k_num_elements, 0, 10);
+    std::vector<GLuint> vals(k_num_elements);
+
+    ShaderStorageBuffer key_buffer(keys);
+    ShaderStorageBuffer val_buffer(vals);
+
+    RadixSort radix_sort;
+    radix_sort(key_buffer.handle(), val_buffer.handle(), keys.size());
+
+    std::vector<GLuint> sorted_keys = key_buffer.get_data<GLuint>();
+
+    check_permutation(keys, sorted_keys);
+    check_sorted(sorted_keys);
+}
+
+TEST_CASE("RadixSort-multiple-sizes")
+{
+    const size_t k_num_elements = GENERATE(10993, 14978, 16243, 18985, 23857, 27865, 33363, 41298, 45821, 47487);
+
+    const uint64_t k_seed = 1;
+    Random random(k_seed);
+
+    printf("Num elements: %zu; Seed: %" PRIu64 "\n", k_num_elements, k_seed);
+
+    std::vector<GLuint> keys = random.sample_int_vector<GLuint>(k_num_elements, 0, UINT32_MAX);
+    std::vector<GLuint> vals(k_num_elements);
 
     ShaderStorageBuffer key_buffer(keys);
     ShaderStorageBuffer val_buffer(vals);
