@@ -251,21 +251,27 @@ void main()
             if (m_block_count_buffer.size() < required_size)
             {
                 m_block_count_buffer.resize(required_size, false);
+#ifdef GLU_VERBOSE // TODO Create a log utility
                 printf("[RadixSort] Block count buffer reallocated to: %zu\n", required_size);
+#endif
             }
 
             required_size = next_power_of_2(count) * sizeof(GLuint);
             if (m_key_scratch_buffer.size() < required_size)
             {
                 m_key_scratch_buffer.resize(required_size, false);
+#ifdef GLU_VERBOSE
                 printf("[RadixSort] Key scratch buffer reallocated to: %zu\n", required_size);
+#endif
             }
 
             required_size = next_power_of_2(count) * sizeof(GLuint);
             if (m_val_scratch_buffer.size() < required_size)
             {
                 m_val_scratch_buffer.resize(required_size, false);
+#ifdef GLU_VERBOSE
                 printf("[RadixSort] Val scratch buffer reallocated to: %zu\n", required_size);
+#endif
             }
 
             GLuint key_buffers[]{key_buffer, m_key_scratch_buffer.handle()};

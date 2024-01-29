@@ -5,6 +5,7 @@
 
 #include "glu/BlellochScan.hpp"
 #include "util/Random.hpp"
+#include "util/StopWatch.hpp"
 
 using namespace glu;
 
@@ -78,4 +79,33 @@ TEST_CASE("BlellochScan-multiple-partitions")
         data_begin += k_num_elements;
         result_begin += k_num_elements;
     }
+}
+
+TEST_CASE("BlellochScan-benchmark", "[.][benchmark]")
+{
+    const size_t k_num_elements = GENERATE(
+        1024,      // 1KB
+        16384,     // 16KB
+        65536,     // 65KB
+        131072,    // 131KB
+        524288,    // 524KB
+        1048576,   // 1MB
+        16777216,  // 16MB
+        67108864,  // 67MB
+        134217728, // 134MB
+        268435456  // 268MB
+    );
+
+    std::vector<GLuint> data(k_num_elements); // Don't need to initialize the vector for benchmarking
+
+    ShaderStorageBuffer buffer(data);
+
+    BlellochScan blelloch_scan(DataType_Uint);
+
+    StopWatch stopwatch;
+
+    blelloch_scan(buffer.handle(), k_num_elements);
+
+    std::string duration_str = stopwatch.elapsed_time_str();
+    printf("BlellochScan; Num elements: %zu, Elapsed: %s\n", k_num_elements, duration_str.c_str());
 }

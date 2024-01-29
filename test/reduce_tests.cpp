@@ -6,6 +6,7 @@
 
 #include "glu/Reduce.hpp"
 #include "util/Random.hpp"
+#include "util/StopWatch.hpp"
 
 using namespace glu;
 using namespace Catch::Matchers;
@@ -179,4 +180,33 @@ TEST_CASE("Reduce-subgroup-non-fitting-size")
 
     GLuint calc_sum = buffer.get_data<GLuint>()[0];
     CHECK(calc_sum == sum);
+}
+
+TEST_CASE("Reduce-benchmark", "[.][benchmark]")
+{
+    const size_t k_num_elements = GENERATE(
+        1024,      // 1KB
+        16384,     // 16KB
+        65536,     // 65KB
+        131072,    // 131KB
+        524288,    // 524KB
+        1048576,   // 1MB
+        16777216,  // 16MB
+        67108864,  // 67MB
+        134217728, // 134MB
+        268435456  // 268MB
+    );
+
+    std::vector<GLuint> data(k_num_elements); // Don't need to initialize the vector for benchmarking
+
+    ShaderStorageBuffer buffer(data);
+
+    Reduce reduce(DataType_Uint, ReduceOperator_Sum);
+
+    StopWatch stopwatch;
+
+    reduce(buffer.handle(), k_num_elements);
+
+    std::string duration_str = stopwatch.elapsed_time_str();
+    printf("Reduce; Num elements: %zu, Elapsed: %s\n", k_num_elements, duration_str.c_str());
 }

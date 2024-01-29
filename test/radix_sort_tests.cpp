@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <catch2/benchmark/catch_benchmark_all.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_all.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -10,6 +11,7 @@
 
 #include "glu/RadixSort.hpp"
 #include "util/Random.hpp"
+#include "util/StopWatch.hpp"
 
 using namespace glu;
 
@@ -153,4 +155,34 @@ TEST_CASE("RadixSort-multiple-sizes")
 
     check_permutation(keys, sorted_keys);
     check_sorted(sorted_keys);
+}
+
+TEST_CASE("RadixSort-benchmark", "[.][benchmark]")
+{
+    const size_t k_num_elements = GENERATE(
+        1024,      // 1KB
+        16384,     // 16KB
+        65536,     // 65KB
+        131072,    // 131KB
+        524288,    // 524KB
+        1048576,   // 1MB
+        16777216,  // 16MB
+        67108864,  // 67MB
+        134217728, // 134MB
+        268435456  // 268MB
+    );
+
+    std::vector<GLuint> keys(k_num_elements); // Don't need to initialize the vector for benchmarking
+    std::vector<GLuint> vals(k_num_elements);
+
+    ShaderStorageBuffer key_buffer(keys);
+    ShaderStorageBuffer val_buffer(vals);
+
+    RadixSort radix_sort;
+
+    StopWatch stopwatch;
+    radix_sort(key_buffer.handle(), val_buffer.handle(), k_num_elements);
+
+    std::string duration_str = stopwatch.elapsed_time_str();
+    printf("Radix sort; Num elements: %zu, Elapsed: %s\n", k_num_elements, duration_str.c_str());
 }
