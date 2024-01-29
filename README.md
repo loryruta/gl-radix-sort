@@ -5,6 +5,10 @@ Ready to use primitives for parallel programming, implemented in OpenGL 4.6.
 
 Currently, includes: Reduce, BlellochScan, RadixSort
 
+## Requirements
+
+- C++17
+
 ## How to include it
 
 ### Copy-paste the utility file
