@@ -3,6 +3,11 @@ add_executable(glu_test
     reduce_tests.cpp
     blelloch_scan_tests.cpp
     radix_sort_tests.cpp
+
+    # These source files test the correct generation of the dist/* files
+    generated/test_include_BlellochScan.cpp
+    generated/test_include_RadixSort.cpp
+    generated/test_include_Reduce.cpp
 )
 
 target_link_libraries(glu_test PRIVATE glu)
