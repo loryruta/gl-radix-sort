@@ -2,3 +2,7 @@
 cmake-build-debug
 .idea
 *.xml
+
+# Python
+venv
+.venv
