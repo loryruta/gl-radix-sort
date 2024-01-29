@@ -7,9 +7,6 @@ set(SHADERS
     resources/sort_test_count_elements.comp.glsl
     )
 
-add_library(glu_hlib INTERFACE)
-target_include_directories(glu_hlib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-
 # Shaders
 #add_custom_target(
 #        shaders

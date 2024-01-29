@@ -8,7 +8,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <glad/glad.h>
 
-#include "RadixSort.hpp"
+#include "glu/RadixSort.hpp"
 #include "util/Random.hpp"
 
 using namespace glu;

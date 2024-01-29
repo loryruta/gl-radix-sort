@@ -4,7 +4,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
-#include "Reduce.hpp"
+#include "glu/Reduce.hpp"
 #include "util/Random.hpp"
 
 using namespace glu;

@@ -5,7 +5,7 @@ add_executable(glu_test
     radix_sort_tests.cpp
 )
 
-target_link_libraries(glu_test PRIVATE glu_hlib)
+target_link_libraries(glu_test PRIVATE glu)
 
 target_link_libraries(glu_test PRIVATE Catch2::Catch2)
 target_link_libraries(glu_test PRIVATE glad)

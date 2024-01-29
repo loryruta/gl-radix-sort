@@ -3,7 +3,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <glad/glad.h>
 
-#include "BlellochScan.hpp"
+#include "glu/BlellochScan.hpp"
 #include "util/Random.hpp"
 
 using namespace glu;
