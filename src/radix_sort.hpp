@@ -281,10 +281,10 @@ namespace rgc::radix_sort
 				// ------------------------------------------------------------------------------------------------
 
 				glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_glob_counts_buf);
-				glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED, GL_UNSIGNED_INT, &k_zero);
+				glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, &k_zero);
 
 				glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_local_offsets_buf);
-				glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED, GL_UNSIGNED_INT, &k_zero);
+				glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, &k_zero);
 
 				// ------------------------------------------------------------------------------------------------
 				// Counting
