@@ -91,10 +91,10 @@ allocate a dummy values array!
 ## Performance
 
 - OS: Ubuntu 22.04
-- CPU: AMD Ryzen 7 3700X 8-Core Processor
+- Processor: AMD Ryzen 7 3700X 8-Core Processor
 - Device: NVIDIA GeForce RTX 2060 SUPER/PCIe/SS
 - NVIDIA Driver Version: 545.23.08
-- RAM: 16 GB
+- Memory: 16 GB
 
 ```
 Reduce; Num elements: 1024, Elapsed: 0.069 ms
