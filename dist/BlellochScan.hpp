@@ -1,3 +1,5 @@
+// This code was automatically generated; you're not supposed to edit it!
+
 #ifndef GLU_BLELLOCHSCAN_HPP
 #define GLU_BLELLOCHSCAN_HPP
 
@@ -81,6 +83,7 @@ namespace glu
 #define GLU_GL_UTILS_HPP
 
 #include <cmath>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -343,6 +346,25 @@ namespace glu
             glBindBufferRange(GL_SHADER_STORAGE_BUFFER, index, m_handle, (GLintptr) offset, (GLsizeiptr) size);
         }
     };
+
+    /// Measures elapsed time on GPU for executing the given callback.
+    inline uint64_t measure_gl_elapsed_time(const std::function<void()>& callback)
+    {
+        GLuint query;
+        uint64_t elapsed_time{};
+
+        glGenQueries(1, &query);
+        glBeginQuery(GL_TIME_ELAPSED, query);
+
+        callback();
+
+        glEndQuery(GL_TIME_ELAPSED);
+
+        glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsed_time);
+        glDeleteQueries(1, &query);
+
+        return elapsed_time;
+    }
 
     template<typename IntegerT>
     IntegerT log32_floor(IntegerT n)

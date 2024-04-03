@@ -24,13 +24,14 @@ def generate_standalone_header_code(in_filepath: str) -> str:
 def generate_standalone_header(in_filepath: str, out_filepath: str):
     print("Generating %s from %s" % (out_filepath, in_filepath))
     with open(out_filepath, "wt") as out_file:
-        out_file.write(generate_standalone_header_code(in_filepath))
+        out_str = "// This code was automatically generated; you're not supposed to edit it!\n\n"
+        out_str += generate_standalone_header_code(in_filepath)
+        out_file.write(out_str)
 
 
 if __name__ == "__main__":
     def p(filename: str):
         return path.join(script_dir, "glu/%s" % filename), path.join(script_dir, "dist/%s" % filename)
-
 
     generate_standalone_header(*p("BlellochScan.hpp"))
     generate_standalone_header(*p("RadixSort.hpp"))
