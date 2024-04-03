@@ -3,7 +3,11 @@
 
 Ready to use RadixSort and other parallel programming primitives, implemented with OpenGL 4.6.
 
-Currently, includes: Reduce, BlellochScan, RadixSort.
+Includes:
+- Parallel Reduce
+- Parallel BlellochScan
+- Parallel RadixSort
+
 Such modules are grouped together under the name "GLU" (OpenGL Utilities).
 
 ## Requirements
