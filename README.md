@@ -1,9 +1,10 @@
 
-# GLU: openGL Utilities
+# gl-radix-sort
 
-Ready to use primitives for parallel programming, implemented in OpenGL 4.6.
+Ready to use RadixSort and other parallel programming primitives, implemented with OpenGL 4.6.
 
-Currently, includes: Reduce, BlellochScan, RadixSort
+Currently, includes: Reduce, BlellochScan, RadixSort.
+Such modules are grouped together under the name "GLU" (OpenGL Utilities).
 
 ## Requirements
 
@@ -20,7 +21,7 @@ Currently, includes: Reduce, BlellochScan, RadixSort
   - **Important: OpenGL 4.6 symbols must be defined prior the utility file!** E.g.:
 
 ```cpp
-#include <glad/glad.h>  // Must be placed earlier! 
+#include <glad/glad.h>  // Must be placed beforehand! 
 #include "Reduce.hpp"
 ```
 
@@ -80,7 +81,8 @@ RadixSort radix_sort;
 radix_sort(buffer, N);
 ```
 
-Note: currently `val_buffer` is required and its type is `GLuint`.
+Note: currently `val_buffer` is **required** and its type is `GLuint`. If you have a keys array you would have to
+allocate a dummy values array!
 
 ## Performance
 
@@ -127,7 +129,8 @@ Radix sort; Num elements: 134217728, Elapsed: 2.518 s
 Radix sort; Num elements: 268435456, Elapsed: 5.022 s
 ```
 
-## References
+## Useful resources
 - http://www.heterogeneouscompute.org/wordpress/wp-content/uploads/2011/06/RadixSort.pdf
 - https://vgc.poly.edu/~csilva/papers/cgf.pdf
-- https://github.com/Devsh-Graphics-Programming/Nabla/tree/radix_sort_tmp
+- Nabla (radix sort implementation): https://github.com/Devsh-Graphics-Programming/Nabla
+- Udacity parallel programming guide: https://www.youtube.com/playlist?list=PLAwxTw4SYaPnFKojVQrmyOGFCqHTxfdv2
