@@ -203,10 +203,7 @@ TEST_CASE("Reduce-benchmark", "[.][benchmark]")
 
     Reduce reduce(DataType_Uint, ReduceOperator_Sum);
 
-    StopWatch stopwatch;
+    uint64_t ns = measure_gl_elapsed_time([&]() { reduce(buffer.handle(), k_num_elements); });
 
-    reduce(buffer.handle(), k_num_elements);
-
-    std::string duration_str = stopwatch.elapsed_time_str();
-    printf("Reduce; Num elements: %zu, Elapsed: %s\n", k_num_elements, duration_str.c_str());
+    printf("Reduce; Num elements: %zu, Elapsed: %s\n", k_num_elements, ns_to_human_string(ns).c_str());
 }

@@ -102,10 +102,7 @@ TEST_CASE("BlellochScan-benchmark", "[.][benchmark]")
 
     BlellochScan blelloch_scan(DataType_Uint);
 
-    StopWatch stopwatch;
+    uint64_t ns = measure_gl_elapsed_time([&]() { blelloch_scan(buffer.handle(), k_num_elements); });
 
-    blelloch_scan(buffer.handle(), k_num_elements);
-
-    std::string duration_str = stopwatch.elapsed_time_str();
-    printf("BlellochScan; Num elements: %zu, Elapsed: %s\n", k_num_elements, duration_str.c_str());
+    printf("BlellochScan; Num elements: %zu, Elapsed: %s\n", k_num_elements, ns_to_human_string(ns).c_str());
 }

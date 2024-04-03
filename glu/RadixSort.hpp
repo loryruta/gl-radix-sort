@@ -234,7 +234,43 @@ void main()
 
         ~RadixSort() = default;
 
-        void operator()(GLuint key_buffer, GLuint val_buffer, size_t count)
+        void prepare_internal_buffers(size_t count)
+        {
+            { // Prepare block count buffer
+                size_t required_size = required_block_count_buffer_size(count);
+                if (m_block_count_buffer.size() < required_size)
+                {
+                    m_block_count_buffer.resize(required_size, false);
+#ifdef GLU_VERBOSE // TODO Create a log utility
+                    printf("[RadixSort] Block count buffer reallocated to: %zu\n", required_size);
+#endif
+                }
+            }
+
+            { // Prepare key scratch buffer
+                size_t required_size = required_key_scratch_buffer_size(count);
+                if (m_key_scratch_buffer.size() < required_size)
+                {
+                    m_key_scratch_buffer.resize(required_size, false);
+#ifdef GLU_VERBOSE
+                    printf("[RadixSort] Key scratch buffer reallocated to: %zu\n", required_size);
+#endif
+                }
+            }
+
+            { // Prepare val scratch buffer
+                size_t required_size = required_val_scratch_buffer_size(count);
+                if (m_val_scratch_buffer.size() < required_size)
+                {
+                    m_val_scratch_buffer.resize(required_size, false);
+#ifdef GLU_VERBOSE
+                    printf("[RadixSort] Val scratch buffer reallocated to: %zu\n", required_size);
+#endif
+                }
+            }
+        }
+
+        void operator()(GLuint key_buffer, GLuint val_buffer, size_t count, size_t num_steps = 0)
         {
             GLU_CHECK_ARGUMENT(key_buffer, "Invalid key buffer");
             GLU_CHECK_ARGUMENT(val_buffer, "Invalid value buffer");
@@ -242,42 +278,15 @@ void main()
             if (count <= 1)
                 return; // Hey, that's already sorted x)
 
+            prepare_internal_buffers(count);
+
             size_t num_blocks = div_ceil(count, size_t(1024));
             size_t num_blocks_power_of_2 = next_power_of_2(num_blocks); // Required by BlellochScan
-
-            size_t required_size;
-
-            required_size = next_power_of_2(16 * num_blocks_power_of_2) * sizeof(GLuint);
-            if (m_block_count_buffer.size() < required_size)
-            {
-                m_block_count_buffer.resize(required_size, false);
-#ifdef GLU_VERBOSE // TODO Create a log utility
-                printf("[RadixSort] Block count buffer reallocated to: %zu\n", required_size);
-#endif
-            }
-
-            required_size = next_power_of_2(count) * sizeof(GLuint);
-            if (m_key_scratch_buffer.size() < required_size)
-            {
-                m_key_scratch_buffer.resize(required_size, false);
-#ifdef GLU_VERBOSE
-                printf("[RadixSort] Key scratch buffer reallocated to: %zu\n", required_size);
-#endif
-            }
-
-            required_size = next_power_of_2(count) * sizeof(GLuint);
-            if (m_val_scratch_buffer.size() < required_size)
-            {
-                m_val_scratch_buffer.resize(required_size, false);
-#ifdef GLU_VERBOSE
-                printf("[RadixSort] Val scratch buffer reallocated to: %zu\n", required_size);
-#endif
-            }
 
             GLuint key_buffers[]{key_buffer, m_key_scratch_buffer.handle()};
             GLuint val_buffers[]{val_buffer, m_val_scratch_buffer.handle()};
 
-            for (int i = 0; i < 8; i++)
+            for (int step = 0; step < 8;)
             {
                 // ---------------------------------------------------------------- Counting
 
@@ -286,12 +295,12 @@ void main()
 
                 m_count_program.use();
 
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_buffers[i % 2]);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_buffers[step % 2]);
                 m_block_count_buffer.bind(1);
                 m_global_count_buffer.bind(2);
 
                 glUniform1ui(m_count_program.get_uniform_location("u_count"), count);
-                glUniform1ui(m_count_program.get_uniform_location("u_radix_shift"), i << 2);
+                glUniform1ui(m_count_program.get_uniform_location("u_radix_shift"), step << 2);
                 glUniform1ui(m_count_program.get_uniform_location("u_num_blocks_power_of_2"), num_blocks_power_of_2);
 
                 glDispatchCompute(num_blocks, 1, 1);
@@ -305,20 +314,42 @@ void main()
 
                 m_reorder_program.use();
 
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_buffers[i % 2]);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, val_buffers[i % 2]);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, key_buffers[(i + 1) % 2]);
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, val_buffers[(i + 1) % 2]);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, key_buffers[step % 2]);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, val_buffers[step % 2]);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, key_buffers[(step + 1) % 2]);
+                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, val_buffers[(step + 1) % 2]);
                 m_block_count_buffer.bind(4);
                 m_global_count_buffer.bind(5);
 
                 glUniform1ui(m_reorder_program.get_uniform_location("u_count"), count);
-                glUniform1ui(m_reorder_program.get_uniform_location("u_radix_shift"), i << 2);
+                glUniform1ui(m_reorder_program.get_uniform_location("u_radix_shift"), step << 2);
                 glUniform1ui(m_reorder_program.get_uniform_location("u_num_blocks_power_of_2"), num_blocks_power_of_2);
 
                 glDispatchCompute(num_blocks, 1, 1);
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+                ++step;
+                if (step == num_steps || step == 8) break;
             }
+        }
+
+    private:
+        [[nodiscard]] static size_t required_block_count_buffer_size(size_t count)
+        {
+            size_t num_blocks = div_ceil(count, size_t(1024));
+            size_t num_blocks_power_of_2 = next_power_of_2(num_blocks); // Required by BlellochScan
+
+            return next_power_of_2(16 * num_blocks_power_of_2) * sizeof(GLuint);
+        }
+
+        [[nodiscard]] static size_t required_key_scratch_buffer_size(size_t count)
+        {
+            return next_power_of_2(count) * sizeof(GLuint);
+        }
+
+        [[nodiscard]] static size_t required_val_scratch_buffer_size(size_t count)
+        {
+            return next_power_of_2(count) * sizeof(GLuint);
         }
     };
 } // namespace glu

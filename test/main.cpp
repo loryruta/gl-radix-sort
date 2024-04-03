@@ -41,6 +41,9 @@ void print_gl_debug()
     glGetIntegerv(GL_WARP_SIZE_NV, &v1);
     printf("GL_WARP_SIZE_NV: %d\n", v1);
 
+    glGetIntegerv(GL_SUBGROUP_SIZE_KHR, &v1);
+    printf("GL_SUBGROUP_SIZE_KHR: %d\n", v1);
+
     printf("----------------------------------------------------------------\n");
 }
 

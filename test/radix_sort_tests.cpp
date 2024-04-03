@@ -180,9 +180,10 @@ TEST_CASE("RadixSort-benchmark", "[.][benchmark]")
 
     RadixSort radix_sort;
 
-    StopWatch stopwatch;
-    radix_sort(key_buffer.handle(), val_buffer.handle(), k_num_elements);
+    radix_sort.prepare_internal_buffers(k_num_elements);
 
-    std::string duration_str = stopwatch.elapsed_time_str();
-    printf("Radix sort; Num elements: %zu, Elapsed: %s\n", k_num_elements, duration_str.c_str());
+    uint64_t ns =
+        measure_gl_elapsed_time([&]() { radix_sort(key_buffer.handle(), val_buffer.handle(), k_num_elements); });
+
+    printf("Radix sort; Num elements: %zu, Elapsed: %s\n", k_num_elements, ns_to_human_string(ns).c_str());
 }
