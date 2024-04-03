@@ -84,7 +84,48 @@ Note: currently `val_buffer` is required and its type is `GLuint`.
 
 ## Performance
 
-TODO
+- OS: Ubuntu 22.04
+- CPU: AMD Ryzen 7 3700X 8-Core Processor
+- Device: NVIDIA GeForce RTX 2060 SUPER/PCIe/SS
+- NVIDIA Driver Version: 545.23.08
+- RAM: 16 GB
+
+```
+Reduce; Num elements: 1024, Elapsed: 0.069 ms
+Reduce; Num elements: 16384, Elapsed: 0.012 ms
+Reduce; Num elements: 65536, Elapsed: 0.016 ms
+Reduce; Num elements: 131072, Elapsed: 0.020 ms
+Reduce; Num elements: 524288, Elapsed: 0.029 ms
+Reduce; Num elements: 1048576, Elapsed: 0.049 ms
+Reduce; Num elements: 16777216, Elapsed: 0.620 ms
+Reduce; Num elements: 67108864, Elapsed: 2.514 ms
+Reduce; Num elements: 134217728, Elapsed: 5.030 ms
+Reduce; Num elements: 268435456, Elapsed: 10.044 ms
+BlellochScan; Num elements: 1024, Elapsed: 1.108 ms
+BlellochScan; Num elements: 16384, Elapsed: 0.081 ms
+BlellochScan; Num elements: 65536, Elapsed: 0.101 ms
+BlellochScan; Num elements: 131072, Elapsed: 0.115 ms
+BlellochScan; Num elements: 524288, Elapsed: 0.168 ms
+BlellochScan; Num elements: 1048576, Elapsed: 0.360 ms
+BlellochScan; Num elements: 16777216, Elapsed: 4.368 ms
+BlellochScan; Num elements: 67108864, Elapsed: 18.407 ms
+BlellochScan; Num elements: 134217728, Elapsed: 37.167 ms
+BlellochScan; Num elements: 268435456, Elapsed: 86.493 ms
+Radix sort; Num elements: 1024, Elapsed: 0.663 ms
+Radix sort; Num elements: 16384, Elapsed: 1.004 ms
+Radix sort; Num elements: 65536, Elapsed: 1.761 ms
+Radix sort; Num elements: 131072, Elapsed: 3.074 ms
+Radix sort; Num elements: 524288, Elapsed: 10.633 ms
+Radix sort; Num elements: 1048576, Elapsed: 20.457 ms
+Radix sort; Num elements: 2097152, Elapsed: 39.688 ms
+Radix sort; Num elements: 4194304, Elapsed: 78.594 ms
+Radix sort; Num elements: 8388608, Elapsed: 0.156 s
+Radix sort; Num elements: 16777216, Elapsed: 0.311 s
+Radix sort; Num elements: 33554432, Elapsed: 0.626 s
+Radix sort; Num elements: 67108864, Elapsed: 1.252 s
+Radix sort; Num elements: 134217728, Elapsed: 2.518 s
+Radix sort; Num elements: 268435456, Elapsed: 5.022 s
+```
 
 ## References
 - http://www.heterogeneouscompute.org/wordpress/wp-content/uploads/2011/06/RadixSort.pdf
