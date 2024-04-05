@@ -133,6 +133,12 @@ Radix sort; Num elements: 134217728, Elapsed: 2.518 s
 Radix sort; Num elements: 268435456, Elapsed: 5.022 s
 ```
 
+To run it on your machine: clone the repository, build `glu_test` and run:
+
+```
+./glu_test [benchmark]
+```
+
 ## Useful resources
 - http://www.heterogeneouscompute.org/wordpress/wp-content/uploads/2011/06/RadixSort.pdf
 - https://vgc.poly.edu/~csilva/papers/cgf.pdf
